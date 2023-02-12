@@ -1,0 +1,10 @@
+build/
+node_modules/
+deps/jq
+npm-debug.log
+
+docs
+
+.DS_Store
+
+.vscode

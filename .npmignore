@@ -1,0 +1,9 @@
+deps/*
+!deps/jq.gyp
+!deps/jq
+!deps/windows-install.*
+.gitmodules
+Dockerfile
+build
+.github
+.vscode
