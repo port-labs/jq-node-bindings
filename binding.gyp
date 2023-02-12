@@ -2,8 +2,12 @@
   "targets": [
     {
       "target_name": "jq-node-bindings",
-      "cflags!": [ "-fno-exceptions", '-fno-rtti' ],
-      "cflags_cc!": [ "-fno-exceptions",  "-std=c++17"],
+      'cflags_cc' : [
+        '-std=c++17'
+      ],
+      'cflags_cc!': [
+        '-fno-rtti'
+      ],
       "sources": [
         "./src/binding.cpp",
         "./src/index.cpp",
@@ -12,14 +16,14 @@
         "<!@(node -p \"require('node-addon-api').include\")",
         "<(module_root_dir)/",
         "deps/jq/src",
-        "build/deps/include",
       ],
       "libraries": [
-        "../build/deps/libjq.a",
+        "../build/deps/libjq.so",
+        "-Wl,-rpath='$$ORIGIN/../deps'"
       ],
       "dependencies": [
-          "deps/jq.gyp:jq"
-        ],
+        "deps/jq.gyp:jq"
+      ],
       'defines': [ 'NAPI_DISABLE_CPP_EXCEPTIONS' ],
     }
   ]

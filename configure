@@ -7,10 +7,7 @@ echo "building jq"
 echo $scriptdir
 
 autoreconf -fi
-./configure  CFLAGS=-fPIC  \
-            --disable-maintainer-mode \
-            --disable-docs \
-            --disable-valgrind \
+./configure \
             --with-oniguruma=builtin \
             --libdir="${scriptdir}/build/deps" \
             --prefix="${scriptdir}/build/deps" $*
@@ -22,6 +19,4 @@ cp modules/oniguruma/src/.libs/libonig.la ${scriptdir}/build/deps/lib
 cp modules/oniguruma/src/.libs/libonig.lai ${scriptdir}/build/deps/lib
 
 echo "finished building jq"
-export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/root/code/jq-bindings/build/deps
-
 popd &> /dev/null
