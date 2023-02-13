@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+
+# aclocal, autoconf, make, libtool, automake
 scriptdir=$(cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd)
 
 pushd ./deps/jq &> /dev/null
@@ -7,8 +9,9 @@ echo "building jq"
 echo $scriptdir
 
 autoreconf -fi
-./configure \
+CPPFLAGS=-D_REENTRANT ./configure \
             --with-oniguruma=builtin \
+            --disable-maintainer-mode \
             --libdir="${scriptdir}/build/deps" \
             --prefix="${scriptdir}/build/deps" $*
 make -j8
@@ -17,6 +20,8 @@ make install-libLTLIBRARIES install-includeHEADERS
 cp modules/oniguruma/src/.libs/libonig.a ${scriptdir}/build/deps/lib
 cp modules/oniguruma/src/.libs/libonig.la ${scriptdir}/build/deps/lib
 cp modules/oniguruma/src/.libs/libonig.lai ${scriptdir}/build/deps/lib
+cp modules/oniguruma/src/.libs/libonig.4.dylib ${scriptdir}/build/deps/libonig.4.dylib
+cp modules/oniguruma/src/.libs/libonig.dylib ${scriptdir}/build/deps/libonig.dylib
 
 echo "finished building jq"
 popd &> /dev/null
