@@ -1,3 +1,11 @@
+#ifndef SRC_BINDING_H_
+#define SRC_BINDING_H_
+
+#include <nan.h>
 #include <string>
 #include "jq.h"
-void jq( std::string json, std::string filter );
+#include "jv.h"
+
+void jq_exec(std::string json, std::string filter);
+
+#endif  // SRC_BINDING_H_

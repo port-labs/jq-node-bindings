@@ -1,10 +1,10 @@
 #include <iostream>
 #include <string>
-#include "binding.h"
 #include "jq.h"
 #include "jv.h"
+#include "src/binding.h"
 
-void jq(std::string json, std::string filter) {
+void jq_exec(std::string json, std::string filter) {
     jq_state *jq = jq_init();
     jq_compile(jq, filter.c_str());
     jv input = jv_parse(json.c_str());
