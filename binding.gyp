@@ -31,13 +31,16 @@
                     {
                         "libraries": [
                             "../build/deps/libjq.dylib",
-                            "../build/deps/libonig.4.dylib",
-                            "../build/deps/libonig.dylib",
+                            # "../build/deps/libonig.4.dylib",
+                            # "../build/deps/libonig.dylib",
                         ],
                         'xcode_settings': {
                             'MACOSX_DEPLOYMENT_TARGET': '12.0.1',
                             'GCC_ENABLE_CPP_RTTI': 'YES'
                         },
+                        "include_dirs": [
+                            "deps/jq"
+                        ]
                     }
                 ]
             ],
