@@ -6,6 +6,5 @@
 #include "jq.h"
 #include "jv.h"
 
-void jq_exec(std::string json, std::string filter);
 
 #endif  // SRC_BINDING_H_

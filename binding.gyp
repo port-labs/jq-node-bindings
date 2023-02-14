@@ -3,20 +3,19 @@
         {
             "target_name": "jq-node-bindings",
             "sources": [
-                "src/binding.cpp",
-                "src/index.cpp",
+                "src/binding.cc",
             ],
             "include_dirs": [
                 "<!(node -e \"require('nan')\")",
                 "<(module_root_dir)/",
-                "deps/jq/src",
+                "deps/jq/src"
             ],
             'conditions': [
                 [
                     'OS=="linux"',
                     {
                         "libraries": [
-                            "../build/deps/libjq.so",
+                            "../build/deps/libjq.so.1",
                             "-Wl,-rpath='$$ORIGIN/../deps'",
                         ],
                         'cflags_cc': [
@@ -44,8 +43,7 @@
             ],
             "dependencies": [
                 "deps/jq.gyp:jq"
-            ],
-            'defines': ['NAPI_DISABLE_CPP_EXCEPTIONS'],
+            ]
         }
     ]
 }
