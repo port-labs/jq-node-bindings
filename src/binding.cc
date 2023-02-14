@@ -17,6 +17,7 @@ private:
                         auto last_it = item_list.end(); last_it --;
                         item_map.erase(last_it->first);
                         item_list.pop_back();
+                        jq_teardown(&last_it->second);
                 }
         };
 public:
