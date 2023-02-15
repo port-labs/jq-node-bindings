@@ -68,8 +68,6 @@ console.log(result); // outputs "bar"
 
 The exec function takes two arguments: a JSON object and a jq input string. It returns the result of running the jq program on the JSON object. The result can be of any type supported by jq: object, array, string, number, boolean, or null.
 
-Here are some examples of how to use the exec function:
-
 ## Contributing
 Pull requests are welcome. For major changes, please open an issue first to discuss what you would like to change.
 
