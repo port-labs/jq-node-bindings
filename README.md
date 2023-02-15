@@ -36,17 +36,17 @@ To use this library, you must have `node-gyp` installed on your system. and the 
 3. The following C\C++ toolchains autoconf make libtool automake
     Homebrew
     ```
-        brew install autoconf make automake libtool
+    brew install autoconf make automake libtool
     ```
 
     Yum
     ```
-        sudo apt-get install -y autoconf make libtool automake
+    sudo apt-get install -y autoconf make libtool automake
     ```
 
     apt-get
     ```
-        sudo apt-get install -y autoconf make libtool automake
+    sudo apt-get install -y autoconf make libtool automake
     ```
 
 
