@@ -19,10 +19,10 @@
                             "-Wl,-rpath='$$ORIGIN/../deps'",
                         ],
                         'cflags_cc': [
-                            '-std=c++17'
+                            '-std=c++17 -fno-exceptions'
                         ],
                         'cflags_cc!': [
-                            '-fno-rtti'
+                            '-fno-rtti -fno-exceptions'
                         ]
                     }
                 ],
@@ -36,8 +36,12 @@
                         ],
                         'xcode_settings': {
                             'MACOSX_DEPLOYMENT_TARGET': '12.0.1',
-                            'GCC_ENABLE_CPP_RTTI': 'YES'
+                            'GCC_ENABLE_CPP_RTTI': 'YES',
+                            'GCC_ENABLE_CPP_EXCEPTIONS': 'YES'
                         },
+                        'OTHER_CPLUSPLUSFLAGS': [
+                            '-std=c++17'
+                        ],
                         "include_dirs": [
                             "deps/jq"
                         ]

@@ -1,13 +1,14 @@
 {
   "name": "jq-node-bindings",
-  "version": "v2.15.0",
+  "version": "v0.0.1",
   "description": "Node.js bindings for JQ",
-  "jq-node-bindingsS": "0.0.1",
+  "jq-node-bindings": "0.0.1",
   "main": "lib/index.js",
   "scripts": {
     "configure": "node-gyp configure",
     "build": "node-gyp build",
-    "install": "node-gyp rebuild"
+    "install": "node-gyp rebuild",
+    "test": "jest"
   },
   "keywords": [
     "jq",
@@ -26,10 +27,13 @@
   "license": "MIT",
   "devDependencies": {
     "bluebird": "^3.5.3",
+    "jest": "^29.0.5",
+    "jest-junit": "^15.0.0",
     "jsdoc": "^3.4.0",
     "jshint": "^2.10.1",
     "mocha": "^10.2.0",
     "node-gyp": "^9.3.1",
+    "prettier": "^2.5.1",
     "toolkit-jsdoc": "^1.0.0"
   },
   "dependencies": {

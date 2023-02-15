@@ -47,27 +47,101 @@ public:
 
 };
 
-LRUCache<std::string, jq_state*> cache(5);
+LRUCache<std::string, jq_state*> cache(100);
 
-std::string jq_exec(std::string json, std::string filter) {
+void jv_object_to_v8(std::string key, jv actual, v8::Local<v8::Object> ret) {
+    jv_kind k = jv_get_kind(actual);
+
+    v8::Local<v8::String> v8_key = Nan::New(key).ToLocalChecked();
+    v8::Local<v8::Value> v8_val;
+
+    switch (k) {
+      case JV_KIND_NULL: {
+          v8_val = Nan::Null();
+          break;
+      }
+      case JV_KIND_TRUE: {
+          v8_val = Nan::True();
+          break;
+      }
+      case JV_KIND_FALSE: {
+          v8_val = Nan::False();
+          break;
+      }
+      case JV_KIND_NUMBER: {
+          v8_val = Nan::New(jv_number_value(actual));
+          break;
+      }
+      case JV_KIND_STRING: {
+          v8_val = Nan::New(jv_string_value(actual)).ToLocalChecked();
+          jv_free(actual);
+          break;
+      }
+      case JV_KIND_ARRAY: {
+          v8::Local<v8::Array> ret_arr = Nan::New<v8::Array>();
+          for (int i = 0; i < jv_array_length(jv_copy(actual)); i++) {
+            jv_object_to_v8(std::to_string(i), jv_array_get(jv_copy(actual), i), ret_arr);
+          }
+          Nan::Set(ret, v8_key, ret_arr);
+          jv_free(actual);
+          break;
+      }
+      case JV_KIND_OBJECT: {
+          v8::Local<v8::Object> ret_obj = Nan::New<v8::Object>();
+          jv_object_foreach(actual, itr_key, value) {
+            jv_object_to_v8(jv_string_value(itr_key), value, ret_obj);
+          }
+          jv_free(actual);
+          Nan::Set(ret, v8_key, ret_obj);
+          break;
+      }
+    }
+
+    if (v8_val.IsEmpty()) {
+        return;
+    }
+
+    Nan::Set(ret, v8_key, v8_val);
+}
+
+void jq_exec(std::string json, std::string filter,const Nan::FunctionCallbackInfo<v8::Value>& info) {
     jq_state *jq = NULL;
 
     if (cache.exist(filter)) {
         jq = cache.get(filter);
     } else {
         jq = jq_init();
-        jq_compile(jq, filter.c_str());
+        if (!jq_compile(jq, filter.c_str())) {
+            info.GetReturnValue().Set(Nan::Null());
+            return;
+        }
         cache.put(filter, jq);
     }
 
     jv input = jv_parse(json.c_str());
+
+    if (!jv_is_valid(input)) {
+        info.GetReturnValue().Set(Nan::Null());
+        return;
+    }
+
+    if (jq == NULL) {
+        info.GetReturnValue().Set(Nan::Null());
+        return;
+    }
+
     jq_start(jq, input, 0);
+
     jv actual = jq_next(jq);
+    jv_kind k = jv_get_kind(actual);
 
-    std::string result = jv_string_value(actual);
+    v8::Local<v8::Object> ret = Nan::New<v8::Object>();
 
-    return result;
+    jv_object_to_v8("value", actual, ret);
+
+    info.GetReturnValue().Set(ret);
 }
+
 
 std::string FromV8String(v8::Local<v8::String> val) {
     Nan::Utf8String keyUTF8(val);
@@ -75,24 +149,26 @@ std::string FromV8String(v8::Local<v8::String> val) {
 }
 
 void Exec(const Nan::FunctionCallbackInfo<v8::Value>& info) {
-    v8::Local<v8::Context> context = info.GetIsolate()->GetCurrentContext();
+    try {
+        v8::Local<v8::Context> context = info.GetIsolate()->GetCurrentContext();
 
-    if (info.Length() < 2) {
-        Nan::ThrowTypeError("Wrong number of arguments");
-        return;
+        if (info.Length() < 2) {
+            Nan::ThrowTypeError("Wrong number of arguments");
+        }
+
+        if (!info[0]->IsString() || !info[1]->IsString()) {
+            Nan::ThrowTypeError("Wrong arguments");
+        }
+
+        std::string json = FromV8String(Nan::To<v8::String>(info[0]).ToLocalChecked());
+        std::string filter = FromV8String(Nan::To<v8::String>(info[1]).ToLocalChecked());
+
+        jq_exec(json, filter, info);
+    } catch (const std::exception& ex) {
+        Nan::ThrowError(ex.what());
+    } catch (...) {
+        Nan::ThrowError("Unknown error occurred");
     }
-
-    if (!info[0]->IsString() || !info[1]->IsString()) {
-        Nan::ThrowTypeError("Wrong arguments");
-        return;
-    }
-
-    std::string json = FromV8String(Nan::To<v8::String>(info[0]).ToLocalChecked());
-    std::string filter = FromV8String(Nan::To<v8::String>(info[1]).ToLocalChecked());
-
-    std::string result = jq_exec(json, filter);
-
-    info.GetReturnValue().Set(Nan::New(result).ToLocalChecked());
 }
 
 void Init(v8::Local<v8::Object> exports) {
