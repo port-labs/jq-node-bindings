@@ -8,7 +8,7 @@
             "include_dirs": [
                 "<!(node -e \"require('nan')\")",
                 "<(module_root_dir)/",
-                "deps/jq/src"
+                "deps/jq"
             ],
             'conditions': [
                 [
