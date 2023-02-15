@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuites name="jest tests" tests="15" failures="0" errors="0" time="0.453">
-  <testsuite name="jq" errors="0" failures="0" skipped="0" timestamp="2023-02-15T17:15:25" time="0.412" tests="15">
+<testsuites name="jest tests" tests="15" failures="0" errors="0" time="0.296">
+  <testsuite name="jq" errors="0" failures="0" skipped="0" timestamp="2023-02-15T17:33:12" time="0.253" tests="15">
     <testcase classname="jq should break" name="jq should break" time="0.004">
     </testcase>
     <testcase classname="jq should break for invalid input" name="jq should break for invalid input" time="0.002">
@@ -13,23 +13,23 @@
     </testcase>
     <testcase classname="jq number should work" name="jq number should work" time="0.001">
     </testcase>
-    <testcase classname="jq should return null" name="jq should return null" time="0.001">
+    <testcase classname="jq should return null" name="jq should return null" time="0.002">
     </testcase>
-    <testcase classname="jq should return array with object" name="jq should return array with object" time="0.001">
+    <testcase classname="jq should return array with object" name="jq should return array with object" time="0">
     </testcase>
     <testcase classname="jq should return an item of an array" name="jq should return an item of an array" time="0.003">
     </testcase>
-    <testcase classname="jq should return array with objects" name="jq should return array with objects" time="0.001">
+    <testcase classname="jq should return array with objects" name="jq should return array with objects" time="0.002">
     </testcase>
-    <testcase classname="jq should return boolean" name="jq should return boolean" time="0.001">
+    <testcase classname="jq should return boolean" name="jq should return boolean" time="0.002">
     </testcase>
-    <testcase classname="jq should return object" name="jq should return object" time="0.001">
-    </testcase>
-    <testcase classname="jq should return recursed obj" name="jq should return recursed obj" time="0">
+    <testcase classname="jq should return object" name="jq should return object" time="0.002">
     </testcase>
     <testcase classname="jq should return recursed obj" name="jq should return recursed obj" time="0.001">
     </testcase>
-    <testcase classname="jq should return null on invalid json" name="jq should return null on invalid json" time="0">
+    <testcase classname="jq should return recursed obj" name="jq should return recursed obj" time="0.002">
+    </testcase>
+    <testcase classname="jq should return null on invalid json" name="jq should return null on invalid json" time="0.001">
     </testcase>
   </testsuite>
 </testsuites>

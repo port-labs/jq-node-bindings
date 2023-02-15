@@ -1,5 +1,5 @@
 {
-  "name": "jq-node-bindings",
+  "name": "@port-labs/jq-node-bindings",
   "version": "v0.0.1",
   "description": "Node.js bindings for JQ",
   "jq-node-bindings": "0.0.1",
@@ -8,6 +8,7 @@
     "configure": "node-gyp configure",
     "build": "node-gyp build",
     "install": "node-gyp rebuild",
+    "prepack": "npm run test",
     "test": "jest"
   },
   "keywords": [
