@@ -13,11 +13,8 @@ jobs:
         node: [16]
         os: [ubuntu-22.04]
         include:
-          # single mac test due to minute multipliers
-          # https://docs.github.com/en/billing/managing-billing-for-github-actions/about-billing-for-github-actions
-          - node: 18
+          - node: 16
             os: macos-12
-          # single windows test due to node.js 14 node-gyp / vs 2022 issues
     runs-on: ${{ matrix.os }}
     steps:
       - name: Install node-gyp deps
