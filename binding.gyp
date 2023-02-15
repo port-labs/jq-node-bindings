@@ -19,7 +19,7 @@
                             "-Wl,-rpath='$$ORIGIN/../deps'",
                         ],
                         'cflags_cc': [
-                            '-std=c++17 -fno-exceptions'
+                            '-std=c++17'
                         ],
                         'cflags_cc!': [
                             '-fno-rtti -fno-exceptions'
