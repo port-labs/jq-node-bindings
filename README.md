@@ -2,6 +2,12 @@
 
 This is a library for Node.js that provides C bindings to the [jq](https://stedolan.github.io/jq/) library. It allows you to use jq to extract and manipulate data from JSON objects in Node.js.
 
+## Installation
+
+```
+   npm install @port-labs/jq-node-bindings
+```
+
 ## Requirements
 
 To use this library, you must have `node-gyp` installed on your system. and the following libraries
