@@ -5,7 +5,7 @@ This is a library for Node.js that provides C bindings to the [jq](https://stedo
 ## Installation
 
 ```
-   npm install @port-labs/jq-node-bindings
+npm install @port-labs/jq-node-bindings
 ```
 
 ## Requirements
@@ -14,7 +14,7 @@ To use this library, you must have `node-gyp` installed on your system. and the 
 
 1. `node-gyp`
     ```
-        npm install -g node-gyp
+    npm install -g node-gyp
     ```
 
 2.  XCode on Mac, gcc on unix
