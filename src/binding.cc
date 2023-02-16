@@ -149,7 +149,6 @@ std::string FromV8String(v8::Local<v8::String> val) {
 }
 
 void Exec(const Nan::FunctionCallbackInfo<v8::Value>& info) {
-    try {
         v8::Local<v8::Context> context = info.GetIsolate()->GetCurrentContext();
 
         if (info.Length() < 2) {
@@ -164,11 +163,6 @@ void Exec(const Nan::FunctionCallbackInfo<v8::Value>& info) {
         std::string filter = FromV8String(Nan::To<v8::String>(info[1]).ToLocalChecked());
 
         jq_exec(json, filter, info);
-    } catch (const std::exception& ex) {
-        Nan::ThrowError(ex.what());
-    } catch (...) {
-        Nan::ThrowError("Unknown error occurred");
-    }
 }
 
 void Init(v8::Local<v8::Object> exports) {

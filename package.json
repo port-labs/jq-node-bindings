@@ -1,13 +1,14 @@
 {
-  "name": "jq-node-bindings",
-  "version": "v0.0.1",
+  "name": "@port-labs/jq-node-bindings",
+  "version": "v0.0.2",
   "description": "Node.js bindings for JQ",
-  "jq-node-bindings": "0.0.1",
+  "jq-node-bindings": "0.0.2",
   "main": "lib/index.js",
   "scripts": {
     "configure": "node-gyp configure",
     "build": "node-gyp build",
     "install": "node-gyp rebuild",
+    "prepack": "npm run test",
     "test": "jest"
   },
   "keywords": [
