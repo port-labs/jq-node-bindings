@@ -7,3 +7,6 @@ Dockerfile
 build
 .github
 .vscode
+**/.git
+.git
+*/.git
