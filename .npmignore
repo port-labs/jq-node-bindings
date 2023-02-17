@@ -10,3 +10,4 @@ build
 **/.git
 .git
 */.git
+reports/**
