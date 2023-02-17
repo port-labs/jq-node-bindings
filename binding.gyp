@@ -8,15 +8,15 @@
             "include_dirs": [
                 "<!(node -e \"require('nan')\")",
                 "<(module_root_dir)/",
-                "deps/jq"
+                "deps/jq/src"
             ],
             'conditions': [
                 [
                     'OS=="linux"',
                     {
                         "libraries": [
-                            "../build/deps/libjq.so.1",
                             "-Wl,-rpath='$$ORIGIN/../deps'",
+                            "../build/deps/libjq.so.1",
                         ],
                         'cflags_cc': [
                             '-std=c++17'
@@ -43,7 +43,7 @@
                             '-std=c++17'
                         ],
                         "include_dirs": [
-                            "deps/jq"
+                            "deps/jq/src"
                         ]
                     }
                 ]
