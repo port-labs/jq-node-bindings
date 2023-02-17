@@ -20,7 +20,7 @@ jobs:
       - name: Install node-gyp deps
         run: |
           if [ "${{ matrix.os }}" == "ubuntu-22.04" ]; then
-            sudo apt-get install -y autoconf make libtool automake tree
+            sudo apt-get install -y autoconf make libtool automake 
           else
             brew install autoconf automake libtool
           fi
@@ -31,10 +31,6 @@ jobs:
         uses: actions/setup-node@v3
         with:
           node-version: ${{ matrix.node-version }}
-      - run: npm install
-      - run: npm run configure
       - run: npm ci
-      - run: tree
       - run: npm run build --if-present
-      - run: tree
       - run: npm test
