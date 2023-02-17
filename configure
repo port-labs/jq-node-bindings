@@ -9,7 +9,8 @@ echo "building jq"
 echo $scriptdir
 
 autoreconf -fi
-CPPFLAGS=-D_REENTRANT ./configure \
+make distclean
+CPPFLAGS=-D_REENTRANT ./configure CFLAGS=-fPIC \
             --disable-maintainer-mode \
             --with-oniguruma=builtin \
             --libdir="${scriptdir}/build/deps" \
