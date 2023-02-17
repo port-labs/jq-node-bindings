@@ -15,8 +15,8 @@
                     'OS=="linux"',
                     {
                         "libraries": [
-                            "../build/deps/libjq.so.1",
                             "-Wl,-rpath='$$ORIGIN/../deps'",
+                            "../build/deps/libjq.so.1",
                         ],
                         'cflags_cc': [
                             '-std=c++17'
