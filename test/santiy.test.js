@@ -118,5 +118,29 @@ describe('jq', () => {
 
         expect(result).toBe(undefined);
     })
+
+    it('should excape \'\' to ""', () => {
+        const json = { foo: 'com' };
+        const input = "'https://url.' + .foo";
+        const result = jq.exec(json, input);
+
+        expect(result).toBe('https://url.com');
+    })
+
+    it('should not escape \' in the middle of the string', () => {
+        const json = { foo: 'com' };
+        const input = "\"https://'url.\" + 'test.' + .foo";
+        const result = jq.exec(json, input);
+
+        expect(result).toBe("https://'url.test.com");
+    });
+
+    it ('should run a jq function succesfully', () => {
+        const json = { foo: 'bar' };
+        const input = '.foo | gsub("bar";"foo")';
+        const result = jq.exec(json, input);
+
+        expect(result).toBe('foo');
+    })
 })
 

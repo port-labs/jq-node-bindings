@@ -11,16 +11,18 @@ echo $scriptdir
 autoreconf -fi
 CPPFLAGS=-D_REENTRANT ./configure \
             --disable-maintainer-mode \
+            --with-oniguruma=builtin \
             --libdir="${scriptdir}/build/deps" \
             --prefix="${scriptdir}/build/deps" $*
 make -j8
-make install-libLTLIBRARIES install-includeHEADERS
 
-# cp modules/oniguruma/src/.libs/libonig.a ${scriptdir}/build/deps/libonig.a
-# cp modules/oniguruma/src/.libs/libonig.la ${scriptdir}/build/deps/libonig.la
-# cp modules/oniguruma/src/.libs/libonig.lai ${scriptdir}/build/deps/libonig.lai
-# cp modules/oniguruma/src/.libs/libonig.4.dylib ${scriptdir}/build/deps/libonig.4.dylib
-# cp modules/oniguruma/src/.libs/libonig.dylib ${scriptdir}/build/deps/libonig.dylib
+cp modules/oniguruma/src/.libs/libonig.a ${scriptdir}/build/deps/libonig.a
+cp modules/oniguruma/src/.libs/libonig.la ${scriptdir}/build/deps/libonig.la
+cp modules/oniguruma/src/.libs/libonig.lai ${scriptdir}/build/deps/libonig.lai
+cp modules/oniguruma/src/.libs/libonig.4.dylib ${scriptdir}/build/deps/libonig.4.dylib
+cp modules/oniguruma/src/.libs/libonig.dylib ${scriptdir}/build/deps/libonig.dylib
+
+make install-libLTLIBRARIES install-includeHEADERS
 
 echo "finished building jq"
 popd &> /dev/null
