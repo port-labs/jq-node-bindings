@@ -8,7 +8,7 @@
             "include_dirs": [
                 "<!(node -e \"require('nan')\")",
                 "<(module_root_dir)/",
-                "deps/jq"
+                "deps/jq/src"
             ],
             'conditions': [
                 [
@@ -43,7 +43,7 @@
                             '-std=c++17'
                         ],
                         "include_dirs": [
-                            "deps/jq"
+                            "deps/jq/src"
                         ]
                     }
                 ]
