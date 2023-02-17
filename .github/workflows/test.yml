@@ -34,4 +34,5 @@ jobs:
       - run: npm ci || true
       - run: tree
       - run: npm run build --if-present
+      - run: tree
       - run: npm test
