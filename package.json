@@ -1,8 +1,8 @@
 {
   "name": "@port-labs/jq-node-bindings",
-  "version": "v0.0.5",
+  "version": "v0.0.6",
   "description": "Node.js bindings for JQ",
-  "jq-node-bindings": "0.0.5",
+  "jq-node-bindings": "0.0.6",
   "main": "lib/index.js",
   "scripts": {
     "configure": "node-gyp configure",
