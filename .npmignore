@@ -1,6 +1,7 @@
 deps/*
 !deps/jq.gyp
 !deps/jq
+!deps/jq/modules
 !deps/windows-install.*
 .gitmodules
 Dockerfile
