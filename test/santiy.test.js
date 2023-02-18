@@ -142,5 +142,13 @@ describe('jq', () => {
 
         expect(result).toBe('foo');
     })
+
+    it ('Testing multiple the \'\' in the same expression', () => {
+        const json = { foo: 'bar' };
+        const input = "'https://some.random.url' + .foo + '-1' + '.' + .foo + '.' + 'longgggg' + .foo + ')test(' + .foo + 'testadsftets'";
+        const result = jq.exec(json, input);
+
+        expect(result).toBe('https://some.random.urlbar-1.bar.longggggbar)test(bartestadsftets');
+    })
 })
 
