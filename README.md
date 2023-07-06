@@ -56,7 +56,7 @@ To use this library, you must have `node-gyp` installed on your system. and the 
 Here's an example of how to use the library:
 
 ```typescript
-import { exec } from 'jq-node-bindings';
+import { exec } from '@port-labs/jq-node-bindings';
 
 const json = { foo: 'bar' };
 const input = '.foo';
