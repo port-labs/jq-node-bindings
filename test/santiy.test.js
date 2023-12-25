@@ -150,5 +150,12 @@ describe('jq', () => {
 
         expect(result).toBe('https://some.random.urlbar-1.bar.longggggbar)test(bartestadsftets');
     })
+
+    it('test disable env', () => {
+        expect(jq.exec({}, 'env', {enableEnv: false})).toEqual({});
+        expect(jq.exec({}, 'env', {enableEnv: true})).not.toEqual({});
+        expect(jq.exec({}, 'env', {})).toEqual({});
+        expect(jq.exec({}, 'env')).toEqual({});
+    })
 })
 
