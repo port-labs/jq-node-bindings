@@ -125,5 +125,16 @@ describe('template', () => {
         expect(render({'{{""}}': 'bar'})).toEqual({});
         expect(render({'{{\'\'}}': 'bar'})).toEqual({});
     });
+    it('recursive templates should work', () => {
+        const json = { foo: 'bar', bar: 'foo' };
+        const render = (input) => jq.renderRecursively(json, input);
+
+        expect(render({'{{.foo}}': '{{.bar}}{{.foo}}'})).toEqual({bar: 'foobar'});
+        expect(render({'{{.foo}}': {foo: '{{.foo}}'}})).toEqual({bar: {foo: 'bar'}});
+        expect(render([1, true, null, undefined, '{{.foo}}', 'https://{{.bar}}.com'])).toEqual([1, true, null, undefined, 'bar', 'https://foo.com']);
+        expect(render([['{{.bar}}{{.foo}}'], 1, '{{.bar | ascii_upcase}}'])).toEqual([['foobar'], 1, 'FOO']);
+        expect(render([{'{{.bar}}': [false, '/foo/{{.foo + .bar}}']}])).toEqual([{foo: [false, '/foo/barfoo']}]);
+        expect(render({foo: [{bar: '{{1}}'}, '{{empty}}']})).toEqual({foo: [{bar: 1}, undefined]});
+    });
 })
 
