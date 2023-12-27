@@ -136,5 +136,18 @@ describe('template', () => {
         expect(render([{'{{.bar}}': [false, '/foo/{{.foo + .bar}}']}])).toEqual([{foo: [false, '/foo/barfoo']}]);
         expect(render({foo: [{bar: '{{1}}'}, '{{empty}}']})).toEqual({foo: [{bar: 1}, undefined]});
     });
+    it('should accept quotes outside of template', () => {
+        const json = { foo: 'bar', bar: 'foo' };
+        const render = (input) => jq.renderRecursively(json, input);
+
+        expect(render('"{{.foo}}"')).toEqual('"bar"');
+        expect(render('\'{{.foo}}\'')).toEqual('\'bar\'');
+    });
+    it('should accept escaped quotes inside jq template', () => {
+        const json = { foo: 'bar', bar: 'foo' };
+        const render = (input) => jq.renderRecursively(json, input);
+
+        expect(render('{{"\\"foo\\""}}')).toEqual('"foo"');
+    });
 })
 
