@@ -45,7 +45,7 @@ describe('template', () => {
         const input = '{{.foo}}';
         const result = jq.renderRecursively(json, input);
 
-        expect(result).toBe(undefined);
+        expect(result).toBe(null);
     });
     it('should excape \'\' to ""', () => {
         const json = { foo: 'com' };
@@ -149,5 +149,22 @@ describe('template', () => {
 
         expect(render('{{"\\"foo\\""}}')).toEqual('"foo"');
     });
+    it('test disable env', () => {
+        expect(jq.renderRecursively({}, '{{env}}', {enableEnv: false})).toEqual({});
+        expect(jq.renderRecursively({}, '{{env}}', {enableEnv: true})).not.toEqual({});
+        expect(jq.renderRecursively({}, '{{env}}', {})).toEqual({});
+        expect(jq.renderRecursively({}, '{{env}}')).toEqual({});
+    })
+    it('test throw on error', () => {
+        expect(() => { jq.renderRecursively({}, '{{foo}}', {throwOnError: true}) }).toThrow("jq: error: foo/0 is not defined at <top-level>, line 1:");
+        expect(() => { jq.renderRecursively({}, '{{1/0}}', {throwOnError: true}) }).toThrow("jq: error: Division by zero? at <top-level>, line 1:");
+        expect(() => { jq.renderRecursively({}, '{{{}}', {throwOnError: true}) }).toThrow("jq: error: syntax error, unexpected $end (Unix shell quoting issues?) at <top-level>, line 1:");
+        expect(() => { jq.renderRecursively({}, '{{ {(0):1} }}', {throwOnError: true}) }).toThrow("jq: error: Cannot use number (0) as object key at <top-level>, line 1:");
+        expect(() => { jq.renderRecursively({}, '{{if true then 1 else 0}}', {throwOnError: true}) }).toThrow("jq: error: Possibly unterminated 'if' statement at <top-level>, line 1:");
+        expect(() => { jq.renderRecursively({}, '{{null | map(.+1)}}', {throwOnError: true}) }).toThrow("jq: error: Cannot iterate over null (null)");
+        expect(() => { jq.renderRecursively({foo: "bar"}, '{{.foo + 1}}', {throwOnError: true}) }).toThrow("jq: error: string (\"bar\") and number (1) cannot be added");
+        expect(() => { jq.renderRecursively({}, '{{foo}}/{{bar}}', {throwOnError: true}) }).toThrow("jq: error: foo/0 is not defined at <top-level>, line 1:");
+        expect(() => { jq.renderRecursively({}, '/{{foo}}/', {throwOnError: true}) }).toThrow("jq: error: foo/0 is not defined at <top-level>, line 1:");
+    })
 })
 

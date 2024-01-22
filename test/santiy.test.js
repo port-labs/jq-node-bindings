@@ -3,7 +3,7 @@ const jq = require('../lib');
 describe('jq', () => {
     it('should break', () => {
         const json = { foo2: 'bar' };
-        const input = '.foo';
+        const input = 'foo';
         const result = jq.exec(json, input);
 
         expect(result).toBe(null);
@@ -116,7 +116,7 @@ describe('jq', () => {
         const input = '.foo';
         const result = jq.exec(json, input);
 
-        expect(result).toBe(undefined);
+        expect(result).toBe(null);
     })
 
     it('should excape \'\' to ""', () => {
@@ -156,6 +156,16 @@ describe('jq', () => {
         expect(jq.exec({}, 'env', {enableEnv: true})).not.toEqual({});
         expect(jq.exec({}, 'env', {})).toEqual({});
         expect(jq.exec({}, 'env')).toEqual({});
+    })
+
+    it('test throw on error', () => {
+        expect(() => { jq.exec({}, 'foo', {throwOnError: true}) }).toThrow("jq: error: foo/0 is not defined at <top-level>, line 1:");
+        expect(() => { jq.exec({}, '1/0', {throwOnError: true}) }).toThrow("jq: error: Division by zero? at <top-level>, line 1:");
+        expect(() => { jq.exec({}, '{', {throwOnError: true}) }).toThrow("jq: error: syntax error, unexpected $end (Unix shell quoting issues?) at <top-level>, line 1:");
+        expect(() => { jq.exec({}, '{(0):1}', {throwOnError: true}) }).toThrow("jq: error: Cannot use number (0) as object key at <top-level>, line 1:");
+        expect(() => { jq.exec({}, 'if true then 1 else 0', {throwOnError: true}) }).toThrow("jq: error: Possibly unterminated 'if' statement at <top-level>, line 1:");
+        expect(() => { jq.exec({}, 'null | map(.+1)', {throwOnError: true}) }).toThrow("jq: error: Cannot iterate over null (null)");
+        expect(() => { jq.exec({foo: "bar"}, '.foo + 1', {throwOnError: true}) }).toThrow("jq: error: string (\"bar\") and number (1) cannot be added");
     })
 })
 
