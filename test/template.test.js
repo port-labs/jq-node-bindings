@@ -156,15 +156,15 @@ describe('template', () => {
         expect(jq.renderRecursively({}, '{{env}}')).toEqual({});
     })
     it('test throw on error', () => {
-        expect(() => { jq.renderRecursively({}, '{{foo}}', {throwOnError: true}) }).toThrow("jq: error: foo/0 is not defined at <top-level>, line 1:");
-        expect(() => { jq.renderRecursively({}, '{{1/0}}', {throwOnError: true}) }).toThrow("jq: error: Division by zero? at <top-level>, line 1:");
-        expect(() => { jq.renderRecursively({}, '{{{}}', {throwOnError: true}) }).toThrow("jq: error: syntax error, unexpected $end (Unix shell quoting issues?) at <top-level>, line 1:");
-        expect(() => { jq.renderRecursively({}, '{{ {(0):1} }}', {throwOnError: true}) }).toThrow("jq: error: Cannot use number (0) as object key at <top-level>, line 1:");
-        expect(() => { jq.renderRecursively({}, '{{if true then 1 else 0}}', {throwOnError: true}) }).toThrow("jq: error: Possibly unterminated 'if' statement at <top-level>, line 1:");
+        expect(() => { jq.renderRecursively({}, '{{foo}}', {throwOnError: true}) }).toThrow("jq: compile error: foo/0 is not defined at <top-level>, line 1:");
+        expect(() => { jq.renderRecursively({}, '{{1/0}}', {throwOnError: true}) }).toThrow("jq: compile error: Division by zero? at <top-level>, line 1:");
+        expect(() => { jq.renderRecursively({}, '{{{}}', {throwOnError: true}) }).toThrow("jq: compile error: syntax error, unexpected $end (Unix shell quoting issues?) at <top-level>, line 1:");
+        expect(() => { jq.renderRecursively({}, '{{ {(0):1} }}', {throwOnError: true}) }).toThrow("jq: compile error: Cannot use number (0) as object key at <top-level>, line 1:");
+        expect(() => { jq.renderRecursively({}, '{{if true then 1 else 0}}', {throwOnError: true}) }).toThrow("jq: compile error: Possibly unterminated 'if' statement at <top-level>, line 1:");
         expect(() => { jq.renderRecursively({}, '{{null | map(.+1)}}', {throwOnError: true}) }).toThrow("jq: error: Cannot iterate over null (null)");
         expect(() => { jq.renderRecursively({foo: "bar"}, '{{.foo + 1}}', {throwOnError: true}) }).toThrow("jq: error: string (\"bar\") and number (1) cannot be added");
-        expect(() => { jq.renderRecursively({}, '{{foo}}/{{bar}}', {throwOnError: true}) }).toThrow("jq: error: foo/0 is not defined at <top-level>, line 1:");
-        expect(() => { jq.renderRecursively({}, '/{{foo}}/', {throwOnError: true}) }).toThrow("jq: error: foo/0 is not defined at <top-level>, line 1:");
+        expect(() => { jq.renderRecursively({}, '{{foo}}/{{bar}}', {throwOnError: true}) }).toThrow("jq: compile error: foo/0 is not defined at <top-level>, line 1:");
+        expect(() => { jq.renderRecursively({}, '/{{foo}}/', {throwOnError: true}) }).toThrow("jq: compile error: foo/0 is not defined at <top-level>, line 1:");
     })
 })
 
