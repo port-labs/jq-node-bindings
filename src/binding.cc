@@ -63,7 +63,7 @@ void jv_object_to_v8(std::string key, jv actual, v8::Local<v8::Object> ret) {
             snprintf(err, sizeof(err), "jq: error: %s", jv_string_value(msg));
             jv_free(msg);
             jv_free(actual);
-            Nan::ThrowTypeError(err);
+            Nan::ThrowError(err);
             return;
           }
           jv_free(msg);
@@ -127,7 +127,7 @@ void throw_err_cb(void *data, jv msg) {
   if (jv_get_kind(msg) != JV_KIND_STRING)
     msg = jv_dump_string(msg, JV_PRINT_INVALID);
   if (!strncmp(jv_string_value(msg), "jq: error", sizeof("jq: error") - 1))
-    snprintf(err_data->buf, sizeof(err_data->buf), "%s", jv_string_value(msg));
+    snprintf(err_data->buf, sizeof(err_data->buf), "jq: compile error%s", jv_string_value(msg) + strlen("jq: error"));
   if (strchr(err_data->buf, '\n'))
     *(strchr(err_data->buf, '\n')) = '\0';
   jv_free(msg);
@@ -143,7 +143,7 @@ void jq_exec(std::string json, std::string filter,const Nan::FunctionCallbackInf
         jq = jq_init();
         jq_set_error_cb(jq, throw_err_cb, &err_msg);
         if (!jq_compile(jq, filter.c_str())) {
-            Nan::ThrowTypeError(err_msg.buf);
+            Nan::ThrowError(err_msg.buf);
             return;
         }
         cache.put(filter, jq);
