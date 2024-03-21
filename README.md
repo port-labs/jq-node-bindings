@@ -35,7 +35,7 @@ To use this library, you must have `node-gyp` installed on your system. and the 
 
     Yum
     ```
-    sudo apt-get install -y autoconf make libtool automake
+    sudo yum install -y autoconf make libtool automake
     ```
 
     apt-get
