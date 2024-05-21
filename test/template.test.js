@@ -125,7 +125,7 @@ describe('template', () => {
         expect(render({'{{""}}': 'bar'})).toEqual({});
         expect(render({'{{\'\'}}': 'bar'})).toEqual({});
         expect(render({ "{{spreadValue()}}": { foo: "bar" } })).toEqual({foo: "bar"});
-        expect(render({ "{{ spreadValue() }}": { foo: "bar" } })).toEqual({foo: "bar"});
+        expect(render({ " {{ spreadValue() }} ": { foo: "bar" } })).toEqual({foo: "bar"});
     });
     it('recursive templates should work', () => {
         const json = { foo: 'bar', bar: 'foo' };
