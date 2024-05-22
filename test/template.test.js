@@ -117,13 +117,18 @@ describe('template', () => {
         expect(result).toBe("https://some.random.url?str=bar&num=1&bool=true&null=null&arr=[\"foo\"]&obj={\"bar\":\"bar\"}");
     });
     it('testing conditional key', () => {
-        const json = { foo: "bar" };
+        const json = {};
         const render = (input) => jq.renderRecursively(json, input);
 
         expect(render({'{{empty}}': 'bar'})).toEqual({});
         expect(render({'{{null}}': 'bar'})).toEqual({});
         expect(render({'{{""}}': 'bar'})).toEqual({});
         expect(render({'{{\'\'}}': 'bar'})).toEqual({});
+    });
+    it('testing spread key', () => {
+        const json = { foo: "bar" };
+        const render = (input) => jq.renderRecursively(json, input);
+
         expect(render({ "{{spreadValue()}}": { foo: "bar" } })).toEqual({foo: "bar"});
         expect(render({ " {{ spreadValue( ) }} ": { foo: "bar" } })).toEqual({foo: "bar"});
         expect(render({ "{{spreadValue()}}": "{{ . }}" })).toEqual({ foo: "bar" });
