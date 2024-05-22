@@ -125,6 +125,14 @@ describe('template', () => {
         expect(render({'{{""}}': 'bar'})).toEqual({});
         expect(render({'{{\'\'}}': 'bar'})).toEqual({});
     });
+    it('testing spread key', () => {
+        const json = { foo: "bar" };
+        const render = (input) => jq.renderRecursively(json, input);
+
+        expect(render({ "{{spreadValue()}}": { foo: "bar" } })).toEqual({foo: "bar"});
+        expect(render({ " {{ spreadValue( ) }} ": { foo: "bar" } })).toEqual({foo: "bar"});
+        expect(render({ "{{spreadValue()}}": "{{ . }}" })).toEqual({ foo: "bar" });
+    });
     it('recursive templates should work', () => {
         const json = { foo: 'bar', bar: 'foo' };
         const render = (input) => jq.renderRecursively(json, input);
@@ -165,6 +173,10 @@ describe('template', () => {
         expect(() => { jq.renderRecursively({foo: "bar"}, '{{.foo + 1}}', {throwOnError: true}) }).toThrow("jq: error: string (\"bar\") and number (1) cannot be added");
         expect(() => { jq.renderRecursively({}, '{{foo}}/{{bar}}', {throwOnError: true}) }).toThrow("jq: compile error: foo/0 is not defined at <top-level>, line 1:");
         expect(() => { jq.renderRecursively({}, '/{{foo}}/', {throwOnError: true}) }).toThrow("jq: compile error: foo/0 is not defined at <top-level>, line 1:");
+        expect(() => { jq.renderRecursively({}, { "{{ spreadValue() }}": "str" }, { throwOnError: true }) })
+            .toThrow('Evaluated value should be an object if the key is {{ spreadValue() }}. Original value: str, evaluated to: "str"');
+        expect(() => { jq.renderRecursively({}, { "{{ spreadValue() }}": "{{ \"str\" }}" }, { throwOnError: true }) })
+            .toThrow('Evaluated value should be an object if the key is {{ spreadValue() }}. Original value: {{ \"str\" }}, evaluated to: "str"');
     })
 })
 
