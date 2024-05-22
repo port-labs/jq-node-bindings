@@ -117,7 +117,7 @@ describe('template', () => {
         expect(result).toBe("https://some.random.url?str=bar&num=1&bool=true&null=null&arr=[\"foo\"]&obj={\"bar\":\"bar\"}");
     });
     it('testing conditional key', () => {
-        const json = {};
+        const json = { foo: "bar" };
         const render = (input) => jq.renderRecursively(json, input);
 
         expect(render({'{{empty}}': 'bar'})).toEqual({});
@@ -126,7 +126,7 @@ describe('template', () => {
         expect(render({'{{\'\'}}': 'bar'})).toEqual({});
         expect(render({ "{{spreadValue()}}": { foo: "bar" } })).toEqual({foo: "bar"});
         expect(render({ " {{ spreadValue( ) }} ": { foo: "bar" } })).toEqual({foo: "bar"});
-        expect(render({ "{{spreadValue()}}": "{{ {foo: \"bar\"} }}" })).toEqual({ foo: "bar" });
+        expect(render({ "{{spreadValue()}}": "{{ . }}" })).toEqual({ foo: "bar" });
     });
     it('recursive templates should work', () => {
         const json = { foo: 'bar', bar: 'foo' };
