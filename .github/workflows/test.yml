@@ -10,10 +10,12 @@ jobs:
   build:
     strategy:
       matrix:
-        node: [16]
+        node: [16, 20]
         os: [ubuntu-22.04]
         include:
           - node: 16
+            os: macos-12
+          - node: 20
             os: macos-12
     runs-on: ${{ matrix.os }}
     steps:
