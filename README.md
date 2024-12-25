@@ -43,6 +43,11 @@ To use this library, you must have `node-gyp` installed on your system. and the 
     sudo apt-get install -y autoconf make libtool automake
     ```
 
+4. If the main `python` version used by your system is `3.12` or higher, you will also need to make sure you have `setuptools` installed (see [here](https://stackoverflow.com/a/77638742/4259027)):
+   ```
+   python3 -m pip install setuptools
+   ```
+
 ## Installation
 
 ```
