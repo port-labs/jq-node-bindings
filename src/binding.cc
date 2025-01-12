@@ -203,6 +203,7 @@ struct AsyncWork {
     napi_deferred deferred;
     jv result;
     std::string error;
+    napi_async_work async_work;
     bool success;
 };
 
@@ -219,8 +220,7 @@ void ExecuteAsync(napi_env env, void* data) {
         if (!jq_compile(jq, work->filter.c_str())) {
             work->error = err_msg.buf;
             work->success = false;
-jq_teardown(&jq);
-
+            jq_teardown(&jq);
             return;
         }
     //     cache.put(work->filter, jv_copy(jq));
@@ -230,7 +230,7 @@ jq_teardown(&jq);
     if (!jv_is_valid(input)) {
         work->error = "Invalid JSON input";
         work->success = false;
-jq_teardown(&jq);
+        jq_teardown(&jq);
         jv_free(input);
 
         return;
@@ -264,8 +264,8 @@ void CompleteAsync(napi_env env, napi_status status, void* data) {
         napi_create_string_utf8(env, work->error.c_str(), NAPI_AUTO_LENGTH, &error);
         napi_reject_deferred(env, work->deferred, error);
     }
-        jv_free(work->result);
-
+    jv_free(work->result);
+    napi_delete_async_work(env,work->async_work);
     delete work; 
 }
 
@@ -293,9 +293,8 @@ napi_value ExecAsync(napi_env env, napi_callback_info info) {
     napi_value resource_name;
     napi_create_string_utf8(env, "ExecAsync", NAPI_AUTO_LENGTH, &resource_name);
 
-    napi_async_work async_work;
-    napi_create_async_work(env, nullptr, resource_name, ExecuteAsync, CompleteAsync, work, &async_work);
-    napi_queue_async_work(env, async_work);
+    napi_create_async_work(env, nullptr, resource_name, ExecuteAsync, CompleteAsync, work, &work->async_work);
+    napi_queue_async_work(env, work->async_work);
 
     return promise;
 }
