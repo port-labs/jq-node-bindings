@@ -46,7 +46,8 @@
                         ],
                         "include_dirs": [
                             "deps/jq/src"
-                        ]
+                        ],      "cflags": ["-fsanitize=address", "-fno-omit-frame-pointer"],
+      "ldflags": ["-fsanitize=address"],
                     }
                 ],
                 [
