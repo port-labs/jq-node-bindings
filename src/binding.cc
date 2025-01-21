@@ -81,6 +81,7 @@ struct JqFilterWrapper {
 public:
     std::string filter_name;
     std::list<JqFilterWrapper*>::iterator cache_pos;
+    bool is_busy = false;
 
     /* init mutex and set filter_name */
     explicit JqFilterWrapper(jq_state* jq_, std::string filter_name_) : 
@@ -107,8 +108,10 @@ public:
         WRAPPER_DEBUG_LOG(this, "Attempting to lock mutex");
         pthread_mutex_lock(&filter_mutex);
         WRAPPER_DEBUG_LOG(this, "Mutex locked");
+        set_busy_true();
     }
     void unlock(){
+        set_busy_false();
         WRAPPER_DEBUG_LOG(this, "Unlocking mutex");
         pthread_mutex_unlock(&filter_mutex);
         WRAPPER_DEBUG_LOG(this, "Mutex unlocked");
@@ -116,6 +119,13 @@ public:
 private:
     jq_state* jq;
     pthread_mutex_t filter_mutex;
+
+    void set_busy_true(){
+        is_busy = true;
+    }
+    void set_busy_false(){
+        is_busy = false;
+    }
 };
 
 template <class KEY_T> class LRUCache {
@@ -135,7 +145,10 @@ private:
             last_it--;
             JqFilterWrapper* wrapper = *last_it;
             CACHE_DEBUG_LOG((void*)wrapper, "Examining wrapper: name='%s'", wrapper->filter_name.c_str());
-            
+            if(wrapper->is_busy){
+                CACHE_DEBUG_LOG((void*)wrapper, "Wrapper is busy, skipping");
+                break;
+            }
             if(wrapper->filter_name == ""){
                 CACHE_DEBUG_LOG((void*)wrapper, "WARNING: Empty filter name found");
             }
