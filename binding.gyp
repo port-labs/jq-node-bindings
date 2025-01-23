@@ -12,7 +12,8 @@
                 "deps/jq/src"
             ],
             "defines": [
-                "NAPI_VERSION=9"
+                "NAPI_VERSION=9",
+                'NAPI_DISABLE_CPP_EXCEPTIONS'
             ],
             "conditions": [
                 [
