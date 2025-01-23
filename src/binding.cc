@@ -19,7 +19,7 @@ static bool debug_enabled = false;
     do { if (debug_enabled) printf("[DEBUG] " fmt "\n", ##__VA_ARGS__); } while (0)
 
 #define ASYNC_DEBUG_LOG(work, fmt, ...) \
-    do { if (debug_enabled) printf("[DEBUG][ASYNC][%p] " fmt "\n", (void*)work, ##__VA_ARGS__); } while (0)
+    do { if (debug_enabled) printf("[DEBUG][ASYNC][%p] " fmt "\n", (jv*)work, ##__VA_ARGS__); } while (0)
 
 #define CACHE_DEBUG_LOG(cache, fmt, ...) \
     do { if (debug_enabled) printf("[DEBUG][CACHE][%p] " fmt "\n", (void*)cache, ##__VA_ARGS__); } while (0)
@@ -619,16 +619,16 @@ napi_value SetDebugMode(napi_env env, napi_callback_info info) {
     return result;
 }
 
-napi_value GetCacheStats(napi_env env, napi_callback_info info) {
-    napi_value result;
-    napi_create_object(env, &result);  
-    struct rusage usage;    
-    getrusage(RUSAGE_SELF, &usage);
-    napi_value maxrss;
-    napi_create_int64(env, usage.ru_maxrss, &maxrss);
-    napi_set_named_property(env, result, "max_rss", maxrss);
-    return result;
-}
+// napi_value GetCacheStats(napi_env env, napi_callback_info info) {
+//     napi_value result;
+//     napi_create_object(env, &result);  
+//     struct rusage usage;    
+//     getrusage(RUSAGE_SELF, &usage);
+//     napi_value maxrss;
+//     napi_create_int64(env, usage.ru_maxrss, &maxrss);
+//     napi_set_named_property(env, result, "max_rss", maxrss);
+//     return result;
+// }
 
 napi_value SetCacheSize(napi_env env, napi_callback_info info) {
     size_t argc = 1;
@@ -669,12 +669,12 @@ napi_value Init(napi_env env, napi_value exports) {
     napi_create_function(env, "execAsync", NAPI_AUTO_LENGTH, ExecAsync, nullptr, &exec_async);
     napi_create_function(env, "setDebugMode", NAPI_AUTO_LENGTH, SetDebugMode, nullptr, &debug_fn);
     napi_create_function(env, "setCacheSize", NAPI_AUTO_LENGTH, SetCacheSize, nullptr, &cache_size_fn);
-    napi_create_function(env, "getCacheStats", NAPI_AUTO_LENGTH, GetCacheStats, nullptr, &cache_stats_fn);
+    // napi_create_function(env, "getCacheStats", NAPI_AUTO_LENGTH, GetCacheStats, nullptr, &cache_stats_fn);
     napi_set_named_property(env, exports, "execSync", exec_sync);
     napi_set_named_property(env, exports, "execAsync", exec_async);
     napi_set_named_property(env, exports, "setDebugMode", debug_fn);
     napi_set_named_property(env, exports, "setCacheSize", cache_size_fn);
-    napi_set_named_property(env, exports, "getCacheStats", cache_stats_fn);
+    // napi_set_named_property(env, exports, "getCacheStats", cache_stats_fn);
     return exports;
 }
 
