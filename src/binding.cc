@@ -55,14 +55,14 @@ struct err_data {
     char buf[4096]; 
 };
 void throw_err_cb(void* data, jv msg) {
-    struct err_data* err_data = static_cast<struct err_data*>(data);
-
-    if (jv_get_kind(msg) != JV_KIND_STRING) {
-        msg = jv_dump_string(msg, JV_PRINT_INVALID);
-    }
-
-    snprintf(err_data->buf, sizeof(err_data->buf), "aa%s", jv_string_value(msg));
-    jv_free(msg);
+  struct err_data *err_data = (struct err_data *)data;
+  if (jv_get_kind(msg) != JV_KIND_STRING)
+    msg = jv_dump_string(msg, JV_PRINT_INVALID);
+  if (!strncmp(jv_string_value(msg), "jq: error", sizeof("jq: error") - 1))
+    snprintf(err_data->buf, sizeof(err_data->buf), "jq: compile error%s", jv_string_value(msg) + strlen("jq: error"));
+  if (strchr(err_data->buf, '\n'))
+    *(strchr(err_data->buf, '\n')) = '\0';
+  jv_free(msg);
 }
 
 /* check napi status to throw error if napi_status is not ok */
@@ -255,19 +255,21 @@ std::string FromNapiString(napi_env env, napi_value value) {
     return result;
 }
 
-void jv_object_to_napi(std::string key, napi_env env, jv actual, napi_value ret) {
+bool jv_object_to_napi(std::string key, napi_env env, jv actual, napi_value ret,std::string& err_msg) {
     jv_kind kind = jv_get_kind(actual);
     napi_value value;
     napi_status status = napi_invalid_arg;
     switch (kind) {
         case JV_KIND_INVALID: {
             jv msg = jv_invalid_get_msg(jv_copy(actual));
+
             if (jv_get_kind(msg) == JV_KIND_STRING) {
-                napi_throw_error(env, nullptr, jv_string_value(msg));
+                err_msg = std::string("jq: error: ") + jv_string_value(msg);
+                jv_free(msg);
+                return false;
             }
-            napi_throw_error(env, nullptr, "jv invalid");
-            jv_free(msg);
-            return ;
+            napi_get_undefined(env, &ret);
+            return true;
         }
         case JV_KIND_NULL: {
             status=napi_get_null(env, &value);
@@ -296,7 +298,11 @@ void jv_object_to_napi(std::string key, napi_env env, jv actual, napi_value ret)
 
             for (size_t i = 0; i < arr_len; i++) {
                 jv v = jv_array_get(jv_copy(actual), i);
-                jv_object_to_napi(std::to_string(i), env, v, value);
+                bool success = jv_object_to_napi(std::to_string(i), env, v, value,err_msg);
+                if(!success){
+                    jv_free(v);
+                    return false;
+                }
                 jv_free(v);
             }
             break;
@@ -310,7 +316,12 @@ void jv_object_to_napi(std::string key, napi_env env, jv actual, napi_value ret)
                 jv obj_key = jv_object_iter_key(actual, iter);
                 jv obj_value = jv_object_iter_value(actual, iter);
 
-                jv_object_to_napi(jv_string_value(obj_key), env, obj_value, value);
+                bool success = jv_object_to_napi(jv_string_value(obj_key), env, obj_value, value,err_msg);
+                if(!success){
+                    jv_free(obj_key);
+                    jv_free(obj_value);
+                    return false;
+                }
 
                 jv_free(obj_key);
                 jv_free(obj_value);
@@ -319,15 +330,16 @@ void jv_object_to_napi(std::string key, napi_env env, jv actual, napi_value ret)
             }
             break;
         }
-        default:
-            napi_throw_error(env, nullptr, "Unsupported jv type");
-            break;
+        // default:
+        //     napi_throw_error(env, nullptr, "Unsupported jv type");
+        //     break;
     }
-    if(!CheckNapiStatus(env,status,"error creating napi object")){
-        return;
+    if(status != napi_ok){
+        err_msg = "error creating napi object";
+        return false;
     }
     napi_set_named_property(env, ret, key.c_str(), value);
-    return;
+    return true;
 }
 
 
@@ -394,8 +406,16 @@ napi_value ExecSync(napi_env env, napi_callback_info info) {
 
     napi_value ret;
     napi_create_object(env, &ret);
+    std::string err_msg_conversion;
+    bool success = jv_object_to_napi("value",env,result,ret,err_msg_conversion);
+    if(!success){
+        napi_throw_error(env, nullptr, err_msg_conversion.c_str());
+        jv_free(result);
+        wrapper->unlock();
+        cache.set_item_in_use_false(wrapper);
+        return nullptr;
+    }
 
-    jv_object_to_napi("value",env,result,ret);
     jv_free(result);
     wrapper->unlock();
     cache.set_item_in_use_false(wrapper);
@@ -456,15 +476,8 @@ void ExecuteAsync(napi_env env, void* data) {
     ASYNC_DEBUG_LOG(work, "jq execution started");
 
     jv result=jq_next(wrapper->get_jq());
-    if(jv_is_valid(result)){
-        work->result = result;
-        work->success = true;
-    }else{
-        ASYNC_DEBUG_LOG(work, "jq execution failed - invalid result");
-        work->error = "jq execution failed - invalid result";
-        work->success = false;
-        
-    }
+    work->result = result;
+    work->success = true;
     wrapper->unlock();
 
     cache.set_item_in_use_false(wrapper);
@@ -487,7 +500,7 @@ void CompleteAsync(napi_env env, napi_status status, void* data) {
         }
     };
     if(status != napi_ok){
-        napi_throw_type_error(env, nullptr, "Wrong number of arguments. Expected 2.");
+        napi_throw_type_error(env, nullptr, "Got error from async work");
         napi_reject_deferred(env, work->deferred, nullptr);
         cleanup();
         return;
@@ -513,12 +526,33 @@ void CompleteAsync(napi_env env, napi_status status, void* data) {
             return;
         }
         DEBUG_LOG("[COMPLETE ASYNC][%p] result %p", work, work->result);
-        jv_object_to_napi("value", env, work->result, ret);
+        std::string err_msg_conversion;
+        bool success = jv_object_to_napi("value", env, work->result, ret,err_msg_conversion);
+        if(!success){
+            napi_value error;
+            napi_create_string_utf8(env, err_msg_conversion.c_str(), NAPI_AUTO_LENGTH, &error);
+
+            napi_value error_obj;
+            napi_create_object(env, &error_obj);
+            napi_set_named_property(env, error_obj, "message", error);
+            // napi_create_error(env, nullptr, error, &error_obj);
+            napi_reject_deferred(env, work->deferred, error_obj);
+
+            jv_free(work->result);
+            napi_close_handle_scope(env, scope);
+            return;
+        }
         napi_resolve_deferred(env, work->deferred, ret);
     } else {
         napi_value error;
         napi_create_string_utf8(env, work->error.c_str(), NAPI_AUTO_LENGTH, &error);
-        napi_reject_deferred(env, work->deferred, error);
+
+        napi_value error_obj;
+        napi_create_object(env, &error_obj);
+        napi_set_named_property(env, error_obj, "message", error);
+
+        // napi_create_error(env, nullptr, error, &error_obj);
+        napi_reject_deferred(env, work->deferred, error_obj);
     }
     cleanup();
     napi_close_handle_scope(env, scope);
