@@ -81,7 +81,6 @@ struct JqFilterWrapper {
 public:
     std::string filter_name;
     std::list<JqFilterWrapper*>::iterator cache_pos;
-    bool is_busy = false;
 
     /* init mutex and set filter_name */
     explicit JqFilterWrapper(jq_state* jq_, std::string filter_name_) : 
@@ -108,10 +107,8 @@ public:
         WRAPPER_DEBUG_LOG(this, "Attempting to lock mutex");
         pthread_mutex_lock(&filter_mutex);
         WRAPPER_DEBUG_LOG(this, "Mutex locked");
-        set_busy_true();
     }
     void unlock(){
-        set_busy_false();
         WRAPPER_DEBUG_LOG(this, "Unlocking mutex");
         pthread_mutex_unlock(&filter_mutex);
         WRAPPER_DEBUG_LOG(this, "Mutex unlocked");
@@ -120,32 +117,30 @@ private:
     jq_state* jq;
     pthread_mutex_t filter_mutex;
 
-    void set_busy_true(){
-        is_busy = true;
-    }
-    void set_busy_false(){
-        is_busy = false;
-    }
 };
 
 template <class KEY_T> class LRUCache {
 private:
     pthread_mutex_t cache_mutex; 
-    
     std::list<JqFilterWrapper*> item_list;
     std::unordered_map<KEY_T,  JqFilterWrapper*> item_map;
+    std::unordered_map<JqFilterWrapper*,  bool> is_item_in_use;
 
     size_t cache_size;
 
     void clean() {
         pthread_mutex_lock(&cache_mutex);
         CACHE_DEBUG_LOG(nullptr, "Starting cleanup. Current size=%zu, target=%zu", item_map.size(), cache_size);
-        while (item_map.size() > cache_size) {
+        if(item_map.size() < cache_size){
+            pthread_mutex_unlock(&cache_mutex);
+            return;
+        }
+        while (item_list.size() > cache_size) {
             auto last_it = item_list.end();
             last_it--;
             JqFilterWrapper* wrapper = *last_it;
-            CACHE_DEBUG_LOG((void*)wrapper, "Examining wrapper: name='%s'", wrapper->filter_name.c_str());
-            if(wrapper->is_busy){
+            CACHE_DEBUG_LOG((void*)wrapper, "Examining wrapper: name='%s', is_in_use=%zu", wrapper->filter_name.c_str(), is_item_in_use[wrapper]);
+            if(is_item_in_use[wrapper]){
                 CACHE_DEBUG_LOG((void*)wrapper, "Wrapper is busy, skipping");
                 break;
             }
@@ -157,6 +152,7 @@ private:
                 CACHE_DEBUG_LOG((void*)wrapper, "Removing wrapper from cache");
                 item_map.erase(wrapper->filter_name);
             };
+            is_item_in_use.erase(wrapper);
             item_list.pop_back();
             CACHE_DEBUG_LOG((void*)wrapper, "Deleting wrapper");
             delete wrapper; 
@@ -175,10 +171,20 @@ public:
         //clear cache
         pthread_mutex_destroy(&cache_mutex);
     }
-
+    void set_item_in_use_true(JqFilterWrapper* val){
+        CACHE_DEBUG_LOG((void*)val, "Incrementing refcnt for wrapper:%p", (void*)val);
+        is_item_in_use[val] = true;
+    }
+    void set_item_in_use_false(JqFilterWrapper* val){
+        pthread_mutex_lock(&cache_mutex);
+        CACHE_DEBUG_LOG((void*)val, "Decrementing refcnt for wrapper:%p", (void*)val);
+        is_item_in_use[val] = false;
+        pthread_mutex_unlock(&cache_mutex);
+    }
     void put(const KEY_T &key, JqFilterWrapper* val) {
         CACHE_DEBUG_LOG((void*)val, "Putting key='%s' wrapper:%p", key.c_str(), (void*)val);
         pthread_mutex_lock(&cache_mutex);
+        set_item_in_use_true(val);
         CACHE_DEBUG_LOG((void*)val, "Got cache lock for put operation");
 
         auto it = item_map.find(key);
@@ -191,7 +197,6 @@ public:
 
         item_map.insert(std::make_pair(key, val));
         CACHE_DEBUG_LOG((void*)val, "Added wrapper:%p to cache", (void*)val);
-
         pthread_mutex_unlock(&cache_mutex);
         CACHE_DEBUG_LOG((void*)val, "Released cache lock after put");
         clean();
@@ -212,6 +217,7 @@ public:
         item_list.erase(wrapper->cache_pos);
         item_list.push_front(wrapper);
         wrapper->cache_pos = item_list.begin();
+        set_item_in_use_true(wrapper);
         CACHE_DEBUG_LOG((void*)wrapper, "Cache hit for jq wrapper,pointer=%p,name=%s", 
                  (void*)wrapper, wrapper->filter_name.c_str());
         pthread_mutex_unlock(&cache_mutex);
@@ -289,14 +295,27 @@ void jv_object_to_napi(std::string key, napi_env env, jv actual, napi_value ret)
             status=napi_create_array_with_length(env, arr_len, &value);
 
             for (size_t i = 0; i < arr_len; i++) {
-                jv_object_to_napi(std::to_string(i), env, jv_array_get(jv_copy(actual), i), value);
+                jv v = jv_array_get(jv_copy(actual), i);
+                jv_object_to_napi(std::to_string(i), env, v, value);
+                jv_free(v);
             }
             break;
         }
         case JV_KIND_OBJECT: {
             status=napi_create_object(env, &value);
-            jv_object_foreach(actual, obj_key, obj_value) {
+
+            int iter = jv_object_iter(actual);
+            while (jv_object_iter_valid(actual, iter)) {
+
+                jv obj_key = jv_object_iter_key(actual, iter);
+                jv obj_value = jv_object_iter_value(actual, iter);
+
                 jv_object_to_napi(jv_string_value(obj_key), env, obj_value, value);
+
+                jv_free(obj_key);
+                jv_free(obj_value);
+
+                iter = jv_object_iter_next(actual, iter);
             }
             break;
         }
@@ -337,21 +356,18 @@ napi_value ExecSync(napi_env env, napi_callback_info info) {
         return nullptr;
     }
 
-    jq_state* jq;
     struct err_data err_msg;
     JqFilterWrapper* wrapper; 
 
     DEBUG_LOG("[SYNC] ExecSync called with filter='%s'", filter.c_str());
 
     wrapper = cache.get(filter);
-    if (wrapper != nullptr) {
-        wrapper->lock();
-    } else {
+    if (wrapper == nullptr) {
         DEBUG_LOG("[SYNC] Creating new wrapper for filter='%s'", filter.c_str());
+        jq_state* jq;
         jq = jq_init();
         jq_set_error_cb(jq, throw_err_cb, &err_msg);
         if (!jq_compile(jq, filter.c_str())) {
-            jq_teardown(&jq);
             napi_throw_error(env, nullptr, err_msg.buf);
             return nullptr;
         }
@@ -360,7 +376,6 @@ napi_value ExecSync(napi_env env, napi_callback_info info) {
             return nullptr;
         }
         wrapper = new JqFilterWrapper(jq, filter);
-        wrapper->lock();
         cache.put(filter, wrapper );
     }
 
@@ -372,6 +387,8 @@ napi_value ExecSync(napi_env env, napi_callback_info info) {
         return nullptr;
     }
 
+    wrapper->lock();
+
     jq_start(wrapper->get_jq(), input, 0);
     jv result = jq_next(wrapper->get_jq());
 
@@ -380,9 +397,8 @@ napi_value ExecSync(napi_env env, napi_callback_info info) {
 
     jv_object_to_napi("value",env,result,ret);
     jv_free(result);
-    jv_free(input);
     wrapper->unlock();
-
+    cache.set_item_in_use_false(wrapper);
     return ret;
 }
 
@@ -403,15 +419,13 @@ void ExecuteAsync(napi_env env, void* data) {
     AsyncWork* work = static_cast<AsyncWork*>(data);
     ASYNC_DEBUG_LOG(work, "ExecuteAsync started for filter='%s'", work->filter.c_str());
 
-    jq_state* jq;
     struct err_data err_msg;
     JqFilterWrapper* wrapper; 
 
     wrapper = cache.get(work->filter);
-    if (wrapper != nullptr) {
-        wrapper->lock();
-    } else {
+    if (wrapper == nullptr) {
         ASYNC_DEBUG_LOG(work, "Creating new jq wrapper for filter='%s'", work->filter.c_str());
+        jq_state* jq;
         jq = jq_init();
         jq_set_error_cb(jq, throw_err_cb, &err_msg);
         if (!jq_compile(jq, work->filter.c_str())) {
@@ -421,11 +435,10 @@ void ExecuteAsync(napi_env env, void* data) {
             return;
         }
         wrapper=new JqFilterWrapper(jq, work->filter);
-        wrapper->lock(); 
         cache.put(work->filter, wrapper );
     }
-
-    jv input = jv_parse(work->json.c_str());
+    
+    jv input = jv_parse_sized(work->json.c_str(), work->json.size());
     ASYNC_DEBUG_LOG(work, "JSON input parsed");
 
     if (!jv_is_valid(input)) {
@@ -434,26 +447,28 @@ void ExecuteAsync(napi_env env, void* data) {
         work->success = false;
         jv_free(input);
         wrapper->unlock();
+        cache.set_item_in_use_false(wrapper);
+
         return;
     }
-
+    wrapper->lock(); 
     jq_start(wrapper->get_jq(), input, 0);
     ASYNC_DEBUG_LOG(work, "jq execution started");
 
-
-    if (!jv_is_valid(work->result)) {
-        ASYNC_DEBUG_LOG(work, "jq execution failed");
-        work->error = "jq execution failed";
+    jv result=jq_next(wrapper->get_jq());
+    if(jv_is_valid(result)){
+        work->result = result;
+        work->success = true;
+    }else{
+        ASYNC_DEBUG_LOG(work, "jq execution failed - invalid result");
+        work->error = "jq execution failed - invalid result";
         work->success = false;
-        wrapper->unlock();
-        return;
+        
     }
-    work->result = jq_next(wrapper->get_jq());
-    ASYNC_DEBUG_LOG(work, "jq execution finished - got result, %p", work->result);
-    work->success = true;
-    jv_free(input);
     wrapper->unlock();
-    ASYNC_DEBUG_LOG(work, "ExecuteAsync finished");
+
+    cache.set_item_in_use_false(wrapper);
+    ASYNC_DEBUG_LOG(work, "jq execution finished - got result, %p", work->result);
 }
 
 
@@ -463,7 +478,7 @@ void CompleteAsync(napi_env env, napi_status status, void* data) {
 
     auto cleanup = [&]() {
         if (!cleanup_done) {
-            DEBUG_LOG("Freeing result, %p", work->result);
+            DEBUG_LOG("Freeing result, %p,refcnt %zu", work->result, jv_get_refcnt(work->result));
             jv_free(work->result);
             napi_delete_async_work(env, work->async_work);
             ASYNC_DEBUG_LOG(work, "Deleting AsyncWork");
@@ -480,8 +495,7 @@ void CompleteAsync(napi_env env, napi_status status, void* data) {
     napi_handle_scope scope;
      status = napi_open_handle_scope(env, &scope);
     if (status != napi_ok) {
-        work->success = false;
-        work->error = "Failed to create handle scope";
+        napi_throw_type_error(env, nullptr, "Failed to create handle scope");
         napi_reject_deferred(env, work->deferred, nullptr);
         cleanup();
         return;
@@ -498,9 +512,8 @@ void CompleteAsync(napi_env env, napi_status status, void* data) {
             cleanup();
             return;
         }
-
+        DEBUG_LOG("[COMPLETE ASYNC][%p] result %p", work, work->result);
         jv_object_to_napi("value", env, work->result, ret);
-
         napi_resolve_deferred(env, work->deferred, ret);
     } else {
         napi_value error;
