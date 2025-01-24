@@ -6,13 +6,13 @@
                 "src/binding.cc"
             ],
             "include_dirs": [
-                "<!(node -p \"require('node-addon-api').include\")",
+                "<!(node -p \"require('node-addon-api').include_dir\")",
                 "<(module_root_dir)/",
-                "node_modules/node-addon-api",
-                "deps/jq/src"
+                "deps/jq/src",
+                "../node-addon-api/"
             ],
             "defines": [
-                "NAPI_VERSION=9",
+                "NAPI_VERSION=8",
                 'NAPI_DISABLE_CPP_EXCEPTIONS'
             ],
             "conditions": [
