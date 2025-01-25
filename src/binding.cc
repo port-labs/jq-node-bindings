@@ -9,23 +9,40 @@
 #include "src/binding.h"
 
 
+// #ifdef DEBUG_MODE
+// static bool debug_enabled = true;
+// #else
+// static bool debug_enabled = false;
+// #endif
+
+// #define DEBUG_LOG(fmt, ...) \
+//     do { if (debug_enabled) printf("[DEBUG] " fmt "\n", ##__VA_ARGS__); } while (0)
+
+// #define ASYNC_DEBUG_LOG(work, fmt, ...) \
+//     do { if (debug_enabled) printf("[DEBUG][ASYNC][%p] " fmt "\n", (jv*)work, ##__VA_ARGS__); } while (0)
+
+// #define CACHE_DEBUG_LOG(cache, fmt, ...) \
+//     do { if (debug_enabled) printf("[DEBUG][CACHE][%p] " fmt "\n", (void*)cache, ##__VA_ARGS__); } while (0)
+
+// #define WRAPPER_DEBUG_LOG(wrapper, fmt, ...) \
+//     do { if (debug_enabled) printf("[DEBUG][WRAPPER:%p] " fmt "\n", (void*)wrapper, ##__VA_ARGS__); } while (0)
 #ifdef DEBUG_MODE
-static bool debug_enabled = true;
+#define DEBUG_ENABLED 1
 #else
-static bool debug_enabled = false;
+#define DEBUG_ENABLED 0
 #endif
 
-#define DEBUG_LOG(fmt, ...) \
-    do { if (debug_enabled) printf("[DEBUG] " fmt "\n", ##__VA_ARGS__); } while (0)
-
-#define ASYNC_DEBUG_LOG(work, fmt, ...) \
-    do { if (debug_enabled) printf("[DEBUG][ASYNC][%p] " fmt "\n", (jv*)work, ##__VA_ARGS__); } while (0)
-
-#define CACHE_DEBUG_LOG(cache, fmt, ...) \
-    do { if (debug_enabled) printf("[DEBUG][CACHE][%p] " fmt "\n", (void*)cache, ##__VA_ARGS__); } while (0)
-
-#define WRAPPER_DEBUG_LOG(wrapper, fmt, ...) \
-    do { if (debug_enabled) printf("[DEBUG][WRAPPER:%p] " fmt "\n", (void*)wrapper, ##__VA_ARGS__); } while (0)
+#if DEBUG_ENABLED
+#define DEBUG_LOG(fmt, ...) printf("[DEBUG] " fmt "\n", ##__VA_ARGS__)
+#define ASYNC_DEBUG_LOG(work, fmt, ...) printf("[DEBUG][ASYNC][%p] " fmt "\n", (jv*)work, ##__VA_ARGS__)
+#define CACHE_DEBUG_LOG(cache, fmt, ...) printf("[DEBUG][CACHE][%p] " fmt "\n", (void*)cache, ##__VA_ARGS__)
+#define WRAPPER_DEBUG_LOG(wrapper, fmt, ...) printf("[DEBUG][WRAPPER:%p] " fmt "\n", (void*)wrapper, ##__VA_ARGS__)
+#else
+#define DEBUG_LOG(fmt, ...) ((void)0)
+#define ASYNC_DEBUG_LOG(work, fmt, ...) ((void)0)
+#define CACHE_DEBUG_LOG(cache, fmt, ...) ((void)0)
+#define WRAPPER_DEBUG_LOG(wrapper, fmt, ...) ((void)0)
+#endif
 
 static size_t global_cache_size = 100;
 
@@ -81,7 +98,6 @@ struct JqFilterWrapper {
 public:
     std::string filter_name;
     std::list<JqFilterWrapper*>::iterator cache_pos;
-
     /* init mutex and set filter_name */
     explicit JqFilterWrapper(jq_state* jq_, std::string filter_name_) : 
         filter_name(filter_name_), 
@@ -124,7 +140,7 @@ private:
     pthread_mutex_t cache_mutex; 
     std::list<JqFilterWrapper*> item_list;
     std::unordered_map<KEY_T,  JqFilterWrapper*> item_map;
-    std::unordered_map<JqFilterWrapper*,  bool> is_item_in_use;
+    std::unordered_map<JqFilterWrapper*,  size_t> item_refcnt;
 
     size_t cache_size;
 
@@ -139,8 +155,8 @@ private:
             auto last_it = item_list.end();
             last_it--;
             JqFilterWrapper* wrapper = *last_it;
-            CACHE_DEBUG_LOG((void*)wrapper, "Examining wrapper: name='%s', is_in_use=%zu", wrapper->filter_name.c_str(), is_item_in_use[wrapper]);
-            if(is_item_in_use[wrapper]){
+            CACHE_DEBUG_LOG((void*)wrapper, "Examining wrapper: name='%s', refcnt=%zu", wrapper->filter_name.c_str(), item_refcnt[wrapper]);
+            if(item_refcnt[wrapper]>0){
                 CACHE_DEBUG_LOG((void*)wrapper, "Wrapper is busy, skipping");
                 break;
             }
@@ -152,7 +168,7 @@ private:
                 CACHE_DEBUG_LOG((void*)wrapper, "Removing wrapper from cache");
                 item_map.erase(wrapper->filter_name);
             };
-            is_item_in_use.erase(wrapper);
+            item_refcnt.erase(wrapper);
             item_list.pop_back();
             CACHE_DEBUG_LOG((void*)wrapper, "Deleting wrapper");
             delete wrapper; 
@@ -171,20 +187,20 @@ public:
         //clear cache
         pthread_mutex_destroy(&cache_mutex);
     }
-    void set_item_in_use_true(JqFilterWrapper* val){
+    void inc_refcnt(JqFilterWrapper* val){
         CACHE_DEBUG_LOG((void*)val, "Incrementing refcnt for wrapper:%p", (void*)val);
-        is_item_in_use[val] = true;
+        item_refcnt[val]++;
     }
-    void set_item_in_use_false(JqFilterWrapper* val){
+    void dec_refcnt(JqFilterWrapper* val){
         pthread_mutex_lock(&cache_mutex);
         CACHE_DEBUG_LOG((void*)val, "Decrementing refcnt for wrapper:%p", (void*)val);
-        is_item_in_use[val] = false;
+        item_refcnt[val]--;
         pthread_mutex_unlock(&cache_mutex);
     }
     void put(const KEY_T &key, JqFilterWrapper* val) {
         CACHE_DEBUG_LOG((void*)val, "Putting key='%s' wrapper:%p", key.c_str(), (void*)val);
         pthread_mutex_lock(&cache_mutex);
-        set_item_in_use_true(val);
+        inc_refcnt(val);
         CACHE_DEBUG_LOG((void*)val, "Got cache lock for put operation");
 
         auto it = item_map.find(key);
@@ -217,9 +233,9 @@ public:
         item_list.erase(wrapper->cache_pos);
         item_list.push_front(wrapper);
         wrapper->cache_pos = item_list.begin();
-        set_item_in_use_true(wrapper);
-        CACHE_DEBUG_LOG((void*)wrapper, "Cache hit for jq wrapper,pointer=%p,name=%s", 
-                 (void*)wrapper, wrapper->filter_name.c_str());
+        inc_refcnt(wrapper);
+        CACHE_DEBUG_LOG((void*)wrapper, "Cache hit for jq wrapper,pointer=%p,name=%s,refcnt=%zu", 
+                 (void*)wrapper, wrapper->filter_name.c_str(),item_refcnt[wrapper]);
         pthread_mutex_unlock(&cache_mutex);
         CACHE_DEBUG_LOG((void*)wrapper, "Released cache lock after get");
         return wrapper;
@@ -412,13 +428,13 @@ napi_value ExecSync(napi_env env, napi_callback_info info) {
         napi_throw_error(env, nullptr, err_msg_conversion.c_str());
         jv_free(result);
         wrapper->unlock();
-        cache.set_item_in_use_false(wrapper);
+        cache.dec_refcnt(wrapper);
         return nullptr;
     }
 
     jv_free(result);
     wrapper->unlock();
-    cache.set_item_in_use_false(wrapper);
+    cache.dec_refcnt(wrapper);
     return ret;
 }
 
@@ -430,7 +446,8 @@ struct AsyncWork {
     napi_deferred deferred;
     napi_async_work async_work;
     /* output */
-    jv result;
+    // jv result;
+    std::string result;
     std::string error;
     bool success;
 };
@@ -466,8 +483,8 @@ void ExecuteAsync(napi_env env, void* data) {
         work->error = "Invalid JSON input";
         work->success = false;
         jv_free(input);
+        cache.dec_refcnt(wrapper);
         wrapper->unlock();
-        cache.set_item_in_use_false(wrapper);
 
         return;
     }
@@ -476,11 +493,19 @@ void ExecuteAsync(napi_env env, void* data) {
     ASYNC_DEBUG_LOG(work, "jq execution started");
 
     jv result=jq_next(wrapper->get_jq());
-    work->result = result;
+    jv dump  = jv_dump_string(result, JV_PRINT_INVALID);
+    if(jv_is_valid(dump)){
+    work->result = jv_string_value(dump);
     work->success = true;
+    }else{
+        ASYNC_DEBUG_LOG(work, "failed to get result");
+        work->result = "failed to get result";
+        work->success = false;
+    }
+    jv_free(dump);
     wrapper->unlock();
+    cache.dec_refcnt(wrapper);
 
-    cache.set_item_in_use_false(wrapper);
     ASYNC_DEBUG_LOG(work, "jq execution finished - got result, %p", work->result);
 }
 
@@ -491,8 +516,8 @@ void CompleteAsync(napi_env env, napi_status status, void* data) {
 
     auto cleanup = [&]() {
         if (!cleanup_done) {
-            DEBUG_LOG("Freeing result, %p,refcnt %zu", work->result, jv_get_refcnt(work->result));
-            jv_free(work->result);
+            // DEBUG_LOG("Freeing result, %p,refcnt %zu", work->result, jv_get_refcnt(work->result));
+            // jv_free(work->result);
             napi_delete_async_work(env, work->async_work);
             ASYNC_DEBUG_LOG(work, "Deleting AsyncWork");
             delete work;
@@ -525,9 +550,11 @@ void CompleteAsync(napi_env env, napi_status status, void* data) {
             cleanup();
             return;
         }
-        DEBUG_LOG("[COMPLETE ASYNC][%p] result %p", work, work->result);
         std::string err_msg_conversion;
-        bool success = jv_object_to_napi("value", env, work->result, ret,err_msg_conversion);
+        jv result_jv = jv_parse(work->result.c_str());
+        bool success = jv_object_to_napi("value", env, result_jv, ret,err_msg_conversion);
+        jv_free(result_jv);
+
         if(!success){
             napi_value error;
             napi_create_string_utf8(env, err_msg_conversion.c_str(), NAPI_AUTO_LENGTH, &error);
@@ -538,7 +565,6 @@ void CompleteAsync(napi_env env, napi_status status, void* data) {
             // napi_create_error(env, nullptr, error, &error_obj);
             napi_reject_deferred(env, work->deferred, error_obj);
 
-            jv_free(work->result);
             napi_close_handle_scope(env, scope);
             return;
         }
@@ -598,26 +624,26 @@ napi_value ExecAsync(napi_env env, napi_callback_info info) {
     return promise;
 }
 
-napi_value SetDebugMode(napi_env env, napi_callback_info info) {
-    size_t argc = 1;
-    napi_value args[1];
-    bool enable;
+// napi_value SetDebugMode(napi_env env, napi_callback_info info) {
+//     size_t argc = 1;
+//     napi_value args[1];
+//     bool enable;
     
-    napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
+//     napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
     
-    if (argc < 1) {
-        napi_throw_type_error(env, nullptr, "Wrong number of arguments");
-        return nullptr;
-    }
+//     if (argc < 1) {
+//         napi_throw_type_error(env, nullptr, "Wrong number of arguments");
+//         return nullptr;
+//     }
     
-    napi_get_value_bool(env, args[0], &enable);
-    debug_enabled = enable;
-    DEBUG_LOG("Debug mode %s", enable ? "enabled" : "disabled");
+//     napi_get_value_bool(env, args[0], &enable);
+//     debug_enabled = enable;
+//     DEBUG_LOG("Debug mode %s", enable ? "enabled" : "disabled");
     
-    napi_value result;
-    napi_get_boolean(env, debug_enabled, &result);
-    return result;
-}
+//     napi_value result;
+//     napi_get_boolean(env, debug_enabled, &result);
+//     return result;
+// }
 
 // napi_value GetCacheStats(napi_env env, napi_callback_info info) {
 //     napi_value result;
@@ -663,16 +689,16 @@ napi_value SetCacheSize(napi_env env, napi_callback_info info) {
 }
 
 napi_value Init(napi_env env, napi_value exports) {
-    napi_value exec_sync, exec_async, debug_fn, cache_size_fn,cache_stats_fn;
+    napi_value exec_sync, exec_async, cache_size_fn,cache_stats_fn;
 
     napi_create_function(env, "execSync", NAPI_AUTO_LENGTH, ExecSync, nullptr, &exec_sync);
     napi_create_function(env, "execAsync", NAPI_AUTO_LENGTH, ExecAsync, nullptr, &exec_async);
-    napi_create_function(env, "setDebugMode", NAPI_AUTO_LENGTH, SetDebugMode, nullptr, &debug_fn);
+    // napi_create_function(env, "setDebugMode", NAPI_AUTO_LENGTH, SetDebugMode, nullptr, &debug_fn);
     napi_create_function(env, "setCacheSize", NAPI_AUTO_LENGTH, SetCacheSize, nullptr, &cache_size_fn);
     // napi_create_function(env, "getCacheStats", NAPI_AUTO_LENGTH, GetCacheStats, nullptr, &cache_stats_fn);
     napi_set_named_property(env, exports, "execSync", exec_sync);
     napi_set_named_property(env, exports, "execAsync", exec_async);
-    napi_set_named_property(env, exports, "setDebugMode", debug_fn);
+    // napi_set_named_property(env, exports, "setDebugMode", debug_fn);
     napi_set_named_property(env, exports, "setCacheSize", cache_size_fn);
     // napi_set_named_property(env, exports, "getCacheStats", cache_stats_fn);
     return exports;
