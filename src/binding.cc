@@ -26,17 +26,17 @@
 
 // #define WRAPPER_DEBUG_LOG(wrapper, fmt, ...) \
 //     do { if (debug_enabled) printf("[DEBUG][WRAPPER:%p] " fmt "\n", (void*)wrapper, ##__VA_ARGS__); } while (0)
-#ifdef DEBUG_MODE
+#ifdef ENABLE_DEBUG  // We'll use ENABLE_DEBUG as our flag name
 #define DEBUG_ENABLED 1
 #else
 #define DEBUG_ENABLED 0
 #endif
 
-#if DEBUG_ENABLED
-#define DEBUG_LOG(fmt, ...) printf("[DEBUG] " fmt "\n", ##__VA_ARGS__)
-#define ASYNC_DEBUG_LOG(work, fmt, ...) printf("[DEBUG][ASYNC][%p] " fmt "\n", (jv*)work, ##__VA_ARGS__)
-#define CACHE_DEBUG_LOG(cache, fmt, ...) printf("[DEBUG][CACHE][%p] " fmt "\n", (void*)cache, ##__VA_ARGS__)
-#define WRAPPER_DEBUG_LOG(wrapper, fmt, ...) printf("[DEBUG][WRAPPER:%p] " fmt "\n", (void*)wrapper, ##__VA_ARGS__)
+#ifdef ENABLE_DEBUG
+#define DEBUG_LOG(fmt, ...) fprintf(stderr, "[DEBUG] " fmt "\n", ##__VA_ARGS__)
+#define ASYNC_DEBUG_LOG(work, fmt, ...) fprintf(stderr, "[DEBUG][ASYNC][%p] " fmt "\n", (void*)work, ##__VA_ARGS__)
+#define CACHE_DEBUG_LOG(cache, fmt, ...) fprintf(stderr, "[DEBUG][CACHE][%p] " fmt "\n", (void*)cache, ##__VA_ARGS__)
+#define WRAPPER_DEBUG_LOG(wrapper, fmt, ...) fprintf(stderr, "[DEBUG][WRAPPER][%p] " fmt "\n", (void*)wrapper, ##__VA_ARGS__)
 #else
 #define DEBUG_LOG(fmt, ...) ((void)0)
 #define ASYNC_DEBUG_LOG(work, fmt, ...) ((void)0)
@@ -446,7 +446,7 @@ struct AsyncWork {
     napi_deferred deferred;
     napi_async_work async_work;
     /* output */
-    // jv result;
+    bool is_undefined;
     std::string result;
     std::string error;
     bool success;
@@ -493,22 +493,43 @@ void ExecuteAsync(napi_env env, void* data) {
     ASYNC_DEBUG_LOG(work, "jq execution started");
 
     jv result=jq_next(wrapper->get_jq());
-    jv dump  = jv_dump_string(result, JV_PRINT_INVALID);
-    if(jv_is_valid(dump)){
-    work->result = jv_string_value(dump);
-    work->success = true;
+    if(jv_get_kind(result) == JV_KIND_INVALID){
+        jv msg = jv_invalid_get_msg(jv_copy(result));
+
+        if (jv_get_kind(msg) == JV_KIND_STRING) {
+            work->error = std::string("jq: error: ") + jv_string_value(msg);
+            jv_free(msg);
+            work->success=false;
+        }else{
+            work->is_undefined = true;
+            work->success=true;
+        }
     }else{
-        ASYNC_DEBUG_LOG(work, "failed to get result");
-        work->result = "failed to get result";
-        work->success = false;
+        jv dump  = jv_dump_string(result, JV_PRINT_INVALID);
+        if(jv_is_valid(dump)){
+            work->result = jv_string_value(dump);
+            work->success = true;
+        }else{
+            ASYNC_DEBUG_LOG(work, "failed to get result");
+            work->error = "failed to get result";
+            work->success = false;
+        }
+        jv_free(dump);
     }
-    jv_free(dump);
     wrapper->unlock();
     cache.dec_refcnt(wrapper);
 
-    ASYNC_DEBUG_LOG(work, "jq execution finished - got result, %p", work->result);
+    ASYNC_DEBUG_LOG(work, "jq execution finished - got result, %s", work->result.c_str());
 }
 
+void reject_with_error_message(napi_env env, napi_deferred deferred, std::string error_message){
+    napi_value error;
+    napi_create_string_utf8(env, error_message.c_str(), NAPI_AUTO_LENGTH, &error);
+    napi_value error_obj;
+    napi_create_object(env, &error_obj);
+    napi_set_named_property(env, error_obj, "message", error);
+    napi_reject_deferred(env, deferred, error_obj);
+}
 
 void CompleteAsync(napi_env env, napi_status status, void* data) {
     AsyncWork* work = static_cast<AsyncWork*>(data);
@@ -516,70 +537,50 @@ void CompleteAsync(napi_env env, napi_status status, void* data) {
 
     auto cleanup = [&]() {
         if (!cleanup_done) {
-            // DEBUG_LOG("Freeing result, %p,refcnt %zu", work->result, jv_get_refcnt(work->result));
-            // jv_free(work->result);
             napi_delete_async_work(env, work->async_work);
             ASYNC_DEBUG_LOG(work, "Deleting AsyncWork");
             delete work;
             cleanup_done = true;
         }
     };
-    if(status != napi_ok){
-        napi_throw_type_error(env, nullptr, "Got error from async work");
-        napi_reject_deferred(env, work->deferred, nullptr);
+
+    if(status != napi_ok || !work->success){
+        std::string error_message = work->error;
+        if(error_message == ""){
+            error_message = "Got error from async work";
+        }
+        reject_with_error_message(env, work->deferred, error_message);
         cleanup();
         return;
     }
     napi_handle_scope scope;
-     status = napi_open_handle_scope(env, &scope);
+    status = napi_open_handle_scope(env, &scope);
     if (status != napi_ok) {
-        napi_throw_type_error(env, nullptr, "Failed to create handle scope");
-        napi_reject_deferred(env, work->deferred, nullptr);
+        reject_with_error_message(env, work->deferred, "Failed to create handle scope");
         cleanup();
         return;
     }
 
-    if (work->success) {
         napi_value ret;
 
         status=napi_create_object(env, &ret);
-        if(status != napi_ok){
-            napi_throw_error(env, nullptr, "Failed to create object");
-            napi_close_handle_scope(env, scope);
-            napi_resolve_deferred(env, work->deferred, ret);
-            cleanup();
-            return;
+
+        jv result_jv;
+        if(work->is_undefined){
+            result_jv = jv_invalid();
+        }else{
+            result_jv= jv_parse(work->result.c_str());
         }
         std::string err_msg_conversion;
-        jv result_jv = jv_parse(work->result.c_str());
         bool success = jv_object_to_napi("value", env, result_jv, ret,err_msg_conversion);
         jv_free(result_jv);
 
         if(!success){
-            napi_value error;
-            napi_create_string_utf8(env, err_msg_conversion.c_str(), NAPI_AUTO_LENGTH, &error);
-
-            napi_value error_obj;
-            napi_create_object(env, &error_obj);
-            napi_set_named_property(env, error_obj, "message", error);
-            // napi_create_error(env, nullptr, error, &error_obj);
-            napi_reject_deferred(env, work->deferred, error_obj);
-
+            reject_with_error_message(env, work->deferred, err_msg_conversion);
             napi_close_handle_scope(env, scope);
             return;
         }
         napi_resolve_deferred(env, work->deferred, ret);
-    } else {
-        napi_value error;
-        napi_create_string_utf8(env, work->error.c_str(), NAPI_AUTO_LENGTH, &error);
-
-        napi_value error_obj;
-        napi_create_object(env, &error_obj);
-        napi_set_named_property(env, error_obj, "message", error);
-
-        // napi_create_error(env, nullptr, error, &error_obj);
-        napi_reject_deferred(env, work->deferred, error_obj);
-    }
     cleanup();
     napi_close_handle_scope(env, scope);
 }

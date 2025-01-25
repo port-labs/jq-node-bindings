@@ -44,7 +44,6 @@ describe('template', () => {
         const json = "foo";
         const input = '{{.foo}}';
         const result = jq.renderRecursively(json, input);
-        console.log('!!!!!',result);
         expect(result).toBe(null);
     });
     it('should excape \'\' to ""', () => {
