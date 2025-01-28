@@ -1,13 +1,12 @@
 #ifndef SRC_BINDING_H_
 #define SRC_BINDING_H_
 
-#include <nan.h>
+#include <napi.h> 
 
-extern "C"
-{
+extern "C" {
     #include "jq.h"
 }
 
 #include <string>
 
-#endif  // SRC_BINDING_H_
+#endif 
