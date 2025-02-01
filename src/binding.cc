@@ -46,7 +46,7 @@
 #endif
 
 static size_t global_cache_size = 100;
-static int global_timeout_sec = 10; // TODO: Consider lower number
+static unsigned int global_timeout_sec = 10; // TODO: Consider lower number
 
 static size_t get_uv_thread_pool_size() {
     const char* uv_threads = getenv("UV_THREADPOOL_SIZE");
@@ -446,7 +446,7 @@ struct AsyncWork {
     /* input */
     std::string json;
     std::string filter;
-    int timeout_sec;
+    unsigned int timeout_sec;
     /* promise */
     napi_deferred deferred;
     napi_async_work async_work;
@@ -627,7 +627,7 @@ napi_value ExecAsync(napi_env env, napi_callback_info info) {
         return nullptr;
       }
       if(valuetype == napi_number){
-        status = napi_get_value_int32(env, args[2], &work->timeout_sec);
+        status = napi_get_value_uint32(env, args[2], &work->timeout_sec);
         if (status != napi_ok) {
           napi_throw_error(env, nullptr, "Invalid timeout_sec input");
           return nullptr;

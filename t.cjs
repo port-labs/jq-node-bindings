@@ -8,7 +8,7 @@ const test = async (n, m) => {
     try {
       await jq.execAsync({i}, query, {timeoutSec: 1, throwOnError: true})
     } catch(e) {
-      console.error('ERROR', e)
+      //console.error('ERROR', e)
     }
   }
   return performance.now() - now
@@ -23,7 +23,10 @@ const avgTest = async (points, n, m) => {
 }
 
 (async () => {
-  console.log('avgTest(10, 1000, 100)', await avgTest(10, 1000, 100))
-  console.log('avgTest(10, 1000, 1000)', await avgTest(10, 1000, 1000))
-  console.log('avgTest(10, 1000, 10000)', await avgTest(10, 1000, 10000))
+  const timeoutTest = await avgTest(5, 1, 10000000000)
+  console.log('timeoutTest', timeoutTest, timeoutTest < 2000)
+  for(let i = 0; i < 5; i++) {
+    const m = 10 ** i
+    console.log(m, await avgTest(5, 1000, m))
+  }
 })()
