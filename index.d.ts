@@ -10,6 +10,9 @@ declare module '@port-labs/jq-node-bindings' {
   export function exec(json: object, input: string, options?: ExecOptions): object | Array<any> | string | number | boolean | null;
   export function execAsync(json: object, input: string, options?: ExecOptions): Promise<object | Array<any> | string | number | boolean | null>;
 
+  export function setLimit(limit: number): void;
+  export function setCacheSize(size: number): void;
+
   export function renderRecursively(json: object, input: object | Array<any> | string | number | boolean | null, execOptions?: ExecOptions): object | Array<any> | string | number | boolean | null;
   export function renderRecursivelyAsync(json: object, input: object | Array<any> | string | number | boolean | null, execOptions?: ExecOptions): Promise<object | Array<any> | string | number | boolean | null>;
 }
