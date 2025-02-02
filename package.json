@@ -9,7 +9,7 @@
     "build": "node-gyp build",
     "install": "node-gyp rebuild",
     "prepack": "npm run test",
-    "test": "jest"
+    "test": "NODE_OPTIONS='--experimental-vm-modules' jest"
   },
   "keywords": [
     "jq",
