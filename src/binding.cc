@@ -45,6 +45,7 @@
 #endif
 
 static size_t global_cache_size = 100;
+static unsigned int global_timeout_sec = 5;
 
 static size_t get_uv_thread_pool_size() {
     const char* uv_threads = getenv("UV_THREADPOOL_SIZE");
@@ -61,7 +62,7 @@ static size_t validate_cache_size(size_t requested_size) {
     size_t min_size = get_uv_thread_pool_size();
     size_t new_size = std::max(requested_size, min_size);
     if(requested_size < min_size){
-        DEBUG_LOG("Requested cache size %zu adjusted to minimum %zu (UV thread pool size)",requested_size,min_size); 
+        DEBUG_LOG("Requested cache size %zu adjusted to minimum %zu (UV thread pool size)",requested_size,min_size);
         return min_size;
     }
     return new_size;
@@ -69,7 +70,7 @@ static size_t validate_cache_size(size_t requested_size) {
 
 /* err_data and throw_err_cb to get jq error message*/
 struct err_data {
-    char buf[4096]; 
+    char buf[4096];
 };
 void throw_err_cb(void* data, jv msg) {
   struct err_data *err_data = (struct err_data *)data;
@@ -99,8 +100,8 @@ public:
     std::string filter_name;
     std::list<JqFilterWrapper*>::iterator cache_pos;
     /* init mutex and set filter_name */
-    explicit JqFilterWrapper(jq_state* jq_, std::string filter_name_) : 
-        filter_name(filter_name_), 
+    explicit JqFilterWrapper(jq_state* jq_, std::string filter_name_) :
+        filter_name(filter_name_),
         jq(jq_) {
         DEBUG_LOG("[WRAPPER:%p] Creating wrapper for filter: %s", (void*)this, filter_name_.c_str());
         pthread_mutex_init(&filter_mutex, nullptr);
@@ -137,7 +138,7 @@ private:
 
 template <class KEY_T> class LRUCache {
 private:
-    pthread_mutex_t cache_mutex; 
+    pthread_mutex_t cache_mutex;
     std::list<JqFilterWrapper*> item_list;
     std::unordered_map<KEY_T,  JqFilterWrapper*> item_map;
     std::unordered_map<JqFilterWrapper*,  size_t> item_refcnt;
@@ -171,8 +172,8 @@ private:
             item_refcnt.erase(wrapper);
             item_list.pop_back();
             CACHE_DEBUG_LOG((void*)wrapper, "Deleting wrapper");
-            delete wrapper; 
-        
+            delete wrapper;
+
         }
         CACHE_DEBUG_LOG(this, "Cleanup complete. New size=%zu", item_map.size());
         pthread_mutex_unlock(&cache_mutex);
@@ -217,7 +218,7 @@ public:
         CACHE_DEBUG_LOG((void*)val, "Released cache lock after put");
         clean();
     }
- 
+
     JqFilterWrapper* get(const KEY_T &key) {
         pthread_mutex_lock(&cache_mutex);
         CACHE_DEBUG_LOG(nullptr, "Got cache lock for get operation, key='%s'", key.c_str());
@@ -234,7 +235,7 @@ public:
         item_list.push_front(wrapper);
         wrapper->cache_pos = item_list.begin();
         inc_refcnt(wrapper);
-        CACHE_DEBUG_LOG((void*)wrapper, "Cache hit for jq wrapper,pointer=%p,name=%s,refcnt=%zu", 
+        CACHE_DEBUG_LOG((void*)wrapper, "Cache hit for jq wrapper,pointer=%p,name=%s,refcnt=%zu",
                  (void*)wrapper, wrapper->filter_name.c_str(),item_refcnt[wrapper]);
         pthread_mutex_unlock(&cache_mutex);
         CACHE_DEBUG_LOG((void*)wrapper, "Released cache lock after get");
@@ -385,7 +386,7 @@ napi_value ExecSync(napi_env env, napi_callback_info info) {
     }
 
     struct err_data err_msg;
-    JqFilterWrapper* wrapper; 
+    JqFilterWrapper* wrapper;
 
     DEBUG_LOG("[SYNC] ExecSync called with filter='%s'", filter.c_str());
 
@@ -418,7 +419,7 @@ napi_value ExecSync(napi_env env, napi_callback_info info) {
     wrapper->lock();
 
     jq_start(wrapper->get_jq(), input, 0);
-    jv result = jq_next(wrapper->get_jq());
+    jv result = jq_next(wrapper->get_jq(), global_timeout_sec);
 
     napi_value ret;
     napi_create_object(env, &ret);
@@ -442,6 +443,7 @@ struct AsyncWork {
     /* input */
     std::string json;
     std::string filter;
+    unsigned int timeout_sec;
     /* promise */
     napi_deferred deferred;
     napi_async_work async_work;
@@ -457,7 +459,7 @@ void ExecuteAsync(napi_env env, void* data) {
     ASYNC_DEBUG_LOG(work, "ExecuteAsync started for filter='%s'", work->filter.c_str());
 
     struct err_data err_msg;
-    JqFilterWrapper* wrapper; 
+    JqFilterWrapper* wrapper;
 
     wrapper = cache.get(work->filter);
     if (wrapper == nullptr) {
@@ -474,7 +476,7 @@ void ExecuteAsync(napi_env env, void* data) {
         wrapper=new JqFilterWrapper(jq, work->filter);
         cache.put(work->filter, wrapper );
     }
-    
+
     jv input = jv_parse_sized(work->json.c_str(), work->json.size());
     ASYNC_DEBUG_LOG(work, "JSON input parsed");
 
@@ -488,11 +490,11 @@ void ExecuteAsync(napi_env env, void* data) {
 
         return;
     }
-    wrapper->lock(); 
+    wrapper->lock();
     jq_start(wrapper->get_jq(), input, 0);
     ASYNC_DEBUG_LOG(work, "jq execution started");
 
-    jv result=jq_next(wrapper->get_jq());
+    jv result=jq_next(wrapper->get_jq(), work->timeout_sec);
     if(jv_get_kind(result) == JV_KIND_INVALID){
         jv msg = jv_invalid_get_msg(jv_copy(result));
 
@@ -590,8 +592,8 @@ void CompleteAsync(napi_env env, napi_status status, void* data) {
 napi_value ExecAsync(napi_env env, napi_callback_info info) {
     napi_handle_scope scope;
 
-    size_t argc = 2;
-    napi_value args[2];
+    size_t argc = 3;
+    napi_value args[3];
     napi_value promise;
 
     napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
@@ -612,6 +614,23 @@ napi_value ExecAsync(napi_env env, napi_callback_info info) {
         napi_throw_error(env, nullptr, "Invalid filter input");
         return nullptr;
     }
+
+    work->timeout_sec = global_timeout_sec;
+    if(argc > 2){
+      napi_valuetype valuetype;
+      napi_status status = napi_typeof(env, args[2], &valuetype);
+      if(status != napi_ok){
+        napi_throw_error(env, nullptr, "Invalid timeout_sec input");
+        return nullptr;
+      }
+      if(valuetype == napi_number){
+        status = napi_get_value_uint32(env, args[2], &work->timeout_sec);
+        if (status != napi_ok) {
+          napi_throw_error(env, nullptr, "Invalid timeout_sec input");
+          return nullptr;
+        }
+      }
+    }
     work->success = false;
 
     napi_create_promise(env, &work->deferred, &promise);
@@ -629,18 +648,18 @@ napi_value ExecAsync(napi_env env, napi_callback_info info) {
 //     size_t argc = 1;
 //     napi_value args[1];
 //     bool enable;
-    
+
 //     napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
-    
+
 //     if (argc < 1) {
 //         napi_throw_type_error(env, nullptr, "Wrong number of arguments");
 //         return nullptr;
 //     }
-    
+
 //     napi_get_value_bool(env, args[0], &enable);
 //     debug_enabled = enable;
 //     DEBUG_LOG("Debug mode %s", enable ? "enabled" : "disabled");
-    
+
 //     napi_value result;
 //     napi_get_boolean(env, debug_enabled, &result);
 //     return result;
@@ -648,8 +667,8 @@ napi_value ExecAsync(napi_env env, napi_callback_info info) {
 
 // napi_value GetCacheStats(napi_env env, napi_callback_info info) {
 //     napi_value result;
-//     napi_create_object(env, &result);  
-//     struct rusage usage;    
+//     napi_create_object(env, &result);
+//     struct rusage usage;
 //     getrusage(RUSAGE_SELF, &usage);
 //     napi_value maxrss;
 //     napi_create_int64(env, usage.ru_maxrss, &maxrss);
@@ -661,14 +680,14 @@ napi_value SetCacheSize(napi_env env, napi_callback_info info) {
     size_t argc = 1;
     napi_value args[1];
     int64_t new_size;
-    
+
     napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
     napi_status status;
     if (argc < 1) {
         napi_throw_type_error(env, nullptr, "Wrong number of arguments");
         return nullptr;
     }
-    
+
     status=napi_get_value_int64(env, args[0], &new_size);
     if(!CheckNapiStatus(env,status,"error loading int64")){
         return nullptr;
@@ -677,13 +696,13 @@ napi_value SetCacheSize(napi_env env, napi_callback_info info) {
         napi_throw_error(env, nullptr, "Cache size must be positive");
         return nullptr;
     }
-    
+
     DEBUG_LOG("Changing cache size from %zu to %lld", global_cache_size, new_size);
     size_t old_size = global_cache_size;
 
     global_cache_size = validate_cache_size(static_cast<size_t>(new_size));
     cache.resize(global_cache_size);  // Update cache size
-    
+
     napi_value result;
     napi_create_int64(env, global_cache_size, &result);
     return result;

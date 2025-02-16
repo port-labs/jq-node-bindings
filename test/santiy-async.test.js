@@ -167,5 +167,9 @@ describe('jq - async', () => {
         await expect(jq.execAsync({}, 'null | map(.+1)', {throwOnError: true})).rejects.toThrow("jq: error: Cannot iterate over null (null)");
         await expect(jq.execAsync({foo: "bar"}, '.foo + 1', {throwOnError: true})).rejects.toThrow("jq: error: string (\"bar\") and number (1) cannot be added");
     })
+
+    it('throw after timeout', async () => {
+      await expect(jq.execAsync({}, '[range(infinite)]', { timeoutSec: 1, throwOnError: true })).rejects.toThrow('timeout');
+    });
 })
 
