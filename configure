@@ -10,7 +10,7 @@ echo $scriptdir
 
 autoreconf -fi
 make distclean
-CPPFLAGS=-D_REENTRANT ./configure CFLAGS=-fPIC \
+CPPFLAGS=-D_REENTRANT ./configure CFLAGS="-std=c11 -fPIC -D_GNU_SOURCE" CXXFLAGS="-std=c++17 -fPIC -D_GNU_SOURCE" \
             --disable-maintainer-mode \
             --with-oniguruma=builtin \
             --libdir="${scriptdir}/build/deps" \
