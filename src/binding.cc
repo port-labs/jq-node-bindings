@@ -99,42 +99,31 @@ struct JqFilterWrapper {
 public:
     std::string filter_name;
     std::list<JqFilterWrapper*>::iterator cache_pos;
-    /* init mutex and set filter_name */
-    explicit JqFilterWrapper(jq_state* jq_, std::string filter_name_) :
-        filter_name(filter_name_),
-        jq(jq_) {
-        DEBUG_LOG("[WRAPPER:%p] Creating wrapper for filter: %s", (void*)this, filter_name_.c_str());
+    pthread_mutex_t filter_mutex;
+
+    explicit JqFilterWrapper(std::string filter_name_) :
+        filter_name(filter_name_) {
         pthread_mutex_init(&filter_mutex, nullptr);
     }
 
-    /* free jq and destroy mutex */
     ~JqFilterWrapper() {
-        WRAPPER_DEBUG_LOG(this, "Destroying wrapper: %s", filter_name.c_str());
-        if (jq) {
-            WRAPPER_DEBUG_LOG(this, "Tearing down jq state");
-            jq_teardown(&jq);
-        }
         pthread_mutex_destroy(&filter_mutex);
-        WRAPPER_DEBUG_LOG(this, "Destroyed");
     }
-    jq_state* get_jq(){
+
+    jq_state* create_jq_state(struct err_data* err) {
+        jq_state* jq = jq_init();
+        jq_set_error_cb(jq, throw_err_cb, err);
+        if (!jq_compile(jq, filter_name.c_str())) {
+            jq_teardown(&jq);
+            return nullptr;
+        }
         return jq;
     }
-    void lock(){
-        WRAPPER_DEBUG_LOG(this, "Attempting to lock mutex");
-        pthread_mutex_lock(&filter_mutex);
-        WRAPPER_DEBUG_LOG(this, "Mutex locked");
-    }
-    void unlock(){
-        WRAPPER_DEBUG_LOG(this, "Unlocking mutex");
-        pthread_mutex_unlock(&filter_mutex);
-        WRAPPER_DEBUG_LOG(this, "Mutex unlocked");
-    }
-private:
-    jq_state* jq;
-    pthread_mutex_t filter_mutex;
 
+    void lock() { pthread_mutex_lock(&filter_mutex); }
+    void unlock() { pthread_mutex_unlock(&filter_mutex); }
 };
+
 
 template <class KEY_T> class LRUCache {
 private:
@@ -392,20 +381,16 @@ napi_value ExecSync(napi_env env, napi_callback_info info) {
 
     wrapper = cache.get(filter);
     if (wrapper == nullptr) {
-        DEBUG_LOG("[SYNC] Creating new wrapper for filter='%s'", filter.c_str());
-        jq_state* jq;
-        jq = jq_init();
-        jq_set_error_cb(jq, throw_err_cb, &err_msg);
-        if (!jq_compile(jq, filter.c_str())) {
+        jq_state* temp_jq = jq_init();
+        jq_set_error_cb(temp_jq, throw_err_cb, &err_msg);
+        if (!jq_compile(temp_jq, filter.c_str())) {
+            jq_teardown(&temp_jq);
             napi_throw_error(env, nullptr, err_msg.buf);
             return nullptr;
         }
-        if (jq == nullptr) {
-            napi_throw_error(env, nullptr, "Failed to initialize jq");
-            return nullptr;
-        }
-        wrapper = new JqFilterWrapper(jq, filter);
-        cache.put(filter, wrapper );
+        jq_teardown(&temp_jq); // just testing compilation here
+        wrapper = new JqFilterWrapper(filter);
+        cache.put(filter, wrapper);
     }
 
     jv input = jv_parse(json.c_str());
@@ -417,9 +402,21 @@ napi_value ExecSync(napi_env env, napi_callback_info info) {
     }
 
     wrapper->lock();
+    jq_state* jq_exec = wrapper->create_jq_state(&err_msg);
+    wrapper->unlock();
 
-    jq_start(wrapper->get_jq(), input, 0);
-    jv result = jq_next(wrapper->get_jq(), global_timeout_sec);
+    if (jq_exec == nullptr) {
+        napi_throw_error(env, nullptr, "Failed to compile jq filter on execution");
+        cache.dec_refcnt(wrapper);
+        return nullptr;
+    }
+
+    jq_start(jq_exec, input, 0);
+    jv result = jq_next(jq_exec, global_timeout_sec);
+
+    // After processing, free resources properly:
+    jv_free(input);  // Make sure to free input after jq_next
+    jq_teardown(&jq_exec);
 
     napi_value ret;
     napi_create_object(env, &ret);
@@ -454,75 +451,51 @@ struct AsyncWork {
     bool success;
 };
 
+
 void ExecuteAsync(napi_env env, void* data) {
     AsyncWork* work = static_cast<AsyncWork*>(data);
-    ASYNC_DEBUG_LOG(work, "ExecuteAsync started for filter='%s'", work->filter.c_str());
-
     struct err_data err_msg;
-    JqFilterWrapper* wrapper;
-
-    wrapper = cache.get(work->filter);
-    if (wrapper == nullptr) {
-        ASYNC_DEBUG_LOG(work, "Creating new jq wrapper for filter='%s'", work->filter.c_str());
-        jq_state* jq;
-        jq = jq_init();
-        jq_set_error_cb(jq, throw_err_cb, &err_msg);
-        if (!jq_compile(jq, work->filter.c_str())) {
-            ASYNC_DEBUG_LOG(work, "jq compilation failed");
-            work->error = err_msg.buf;
-            work->success = false;
-            return;
-        }
-        wrapper=new JqFilterWrapper(jq, work->filter);
-        cache.put(work->filter, wrapper );
-    }
 
     jv input = jv_parse_sized(work->json.c_str(), work->json.size());
-    ASYNC_DEBUG_LOG(work, "JSON input parsed");
-
     if (!jv_is_valid(input)) {
-        ASYNC_DEBUG_LOG(work, "Invalid JSON input");
         work->error = "Invalid JSON input";
         work->success = false;
         jv_free(input);
-        cache.dec_refcnt(wrapper);
-        wrapper->unlock();
-
         return;
     }
-    wrapper->lock();
-    jq_start(wrapper->get_jq(), input, 0);
-    ASYNC_DEBUG_LOG(work, "jq execution started");
 
-    jv result=jq_next(wrapper->get_jq(), work->timeout_sec);
-    if(jv_get_kind(result) == JV_KIND_INVALID){
-        jv msg = jv_invalid_get_msg(jv_copy(result));
+    jq_state* jq_exec = jq_init();
+    jq_set_error_cb(jq_exec, throw_err_cb, &err_msg);
+    if (!jq_compile(jq_exec, work->filter.c_str())) {
+        jq_teardown(&jq_exec);
+        jv_free(input);
+        work->error = err_msg.buf;
+        work->success = false;
+        return;
+    }
 
-        if (jv_get_kind(msg) == JV_KIND_STRING) {
-            work->error = std::string("jq: error: ") + jv_string_value(msg);
-            jv_free(msg);
-            work->success=false;
-        }else{
-            work->is_undefined = true;
-            work->success=true;
-        }
-    }else{
-        jv dump  = jv_dump_string(result, JV_PRINT_INVALID);
-        if(jv_is_valid(dump)){
+    jq_start(jq_exec, input, 0);
+    jv result = jq_next(jq_exec, work->timeout_sec);
+
+    if (jv_get_kind(result) == JV_KIND_INVALID) {
+        work->error = "Invalid jq result";
+        work->success = false;
+    } else {
+        jv dump = jv_dump_string(result, JV_PRINT_INVALID);
+        if (jv_is_valid(dump)) {
             work->result = jv_string_value(dump);
             work->success = true;
-        }else{
-            ASYNC_DEBUG_LOG(work, "failed to get result");
-            work->error = "failed to get result";
+        } else {
+            work->error = "Serialization error";
             work->success = false;
         }
         jv_free(dump);
     }
-    wrapper->unlock();
-    cache.dec_refcnt(wrapper);
 
-    ASYNC_DEBUG_LOG(work, "jq execution finished - got result, %s", work->result.c_str());
+    jv_free(result);
+    jq_teardown(&jq_exec);
 }
+
 
 void reject_with_error_message(napi_env env, napi_deferred deferred, std::string error_message){
     napi_value error;
