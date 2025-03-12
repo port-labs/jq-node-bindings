@@ -359,7 +359,16 @@ bool jv_object_to_napi(std::string key, napi_env env, jv actual, napi_value ret,
     return true;
 }
 
-
+static jv jq_input_cb(jq_state *jq, void *data) {
+    jv *input_ptr = (jv*)data;
+    if (jv_is_valid(*input_ptr)) {
+        jv ret = jv_copy(*input_ptr);
+        jv_free(*input_ptr);
+        *input_ptr = jv_null();
+        return ret;
+    }
+    return jv_invalid();
+}
 
 
 napi_value ExecSync(napi_env env, napi_callback_info info) {
@@ -417,6 +426,7 @@ napi_value ExecSync(napi_env env, napi_callback_info info) {
     }
 
     wrapper->lock();
+    jq_set_input_cb(wrapper->get_jq(), jq_input_cb, &input);
 
     jq_start(wrapper->get_jq(), input, 0);
     jv result = jq_next(wrapper->get_jq(), global_timeout_sec);
@@ -491,6 +501,7 @@ void ExecuteAsync(napi_env env, void* data) {
         return;
     }
     wrapper->lock();
+    jq_set_input_cb(wrapper->get_jq(), jq_input_cb, &input);
     jq_start(wrapper->get_jq(), input, 0);
     ASYNC_DEBUG_LOG(work, "jq execution started");
 
