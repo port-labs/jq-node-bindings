@@ -9,7 +9,8 @@
     "build": "node-gyp build",
     "install": "node-gyp rebuild",
     "prepack": "npm run test",
-    "test": "jest"
+    "test": "jest",
+    "benchmark": "for file in benchmarks/scenarios/*.js; do node \"$file\"; done"
   },
   "keywords": [
     "jq",
