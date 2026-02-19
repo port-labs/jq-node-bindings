@@ -1,15 +1,16 @@
 {
   "name": "@port-labs/jq-node-bindings",
-  "version": "v1.0.5",
+  "version": "v2.0.0",
   "description": "Node.js bindings for JQ",
-  "jq-node-bindings": "1.0.5",
   "main": "lib/index.js",
   "scripts": {
-    "configure": "node-gyp configure",
-    "build": "node-gyp build",
-    "install": "node-gyp rebuild",
+    "configure": "cmake-js configure",
+    "build": "cmake-js build",
+    "rebuild": "cmake-js rebuild",
+    "install": "cmake-js rebuild",
     "prepack": "npm run test",
-    "test": "jest"
+    "test": "jest",
+    "benchmark": "node benchmark.js"
   },
   "keywords": [
     "jq",
@@ -33,15 +34,14 @@
     "jsdoc": "^4.0.3",
     "jshint": "^2.13.6",
     "mocha": "^10.2.0",
-    "node-gyp": "^10.2.0",
     "prettier": "^2.5.1",
     "toolkit-jsdoc": "^1.0.0"
   },
   "dependencies": {
     "bindings": "^1.3.1",
-    "node-addon-api": "^8.3.0"
+    "cmake-js": "^7.3.0"
   },
   "engines": {
-    "node": ">=6.0.0"
+    "node": ">=16.0.0"
   }
 }
