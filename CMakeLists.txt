@@ -10,7 +10,7 @@ if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release)
 endif()
 
-set(COMMON_OPT_FLAGS "-O3 -DNDEBUG -ffast-math -funroll-loops -ftree-vectorize -fomit-frame-pointer")
+set(COMMON_OPT_FLAGS "-O3 -DNDEBUG -funroll-loops -ftree-vectorize -fomit-frame-pointer")
 
 # Platform-specific optimizations
 if(CMAKE_SYSTEM_PROCESSOR MATCHES "arm64|aarch64")
@@ -41,7 +41,7 @@ include(ExternalProject)
 set(JQ_SOURCE_DIR ${CMAKE_SOURCE_DIR}/deps/jq)
 set(JQ_INSTALL_DIR ${CMAKE_BINARY_DIR}/jq-install)
 
-set(JQ_OPT_FLAGS "-fPIC -O3 -DNDEBUG -ffast-math -funroll-loops -ftree-vectorize -fomit-frame-pointer -fvisibility=hidden ${ARCH_FLAGS}")
+set(JQ_OPT_FLAGS "-fPIC -O3 -DNDEBUG -funroll-loops -ftree-vectorize -fomit-frame-pointer -fvisibility=hidden ${ARCH_FLAGS}")
 
 ExternalProject_Add(jq_build
     SOURCE_DIR ${JQ_SOURCE_DIR}
