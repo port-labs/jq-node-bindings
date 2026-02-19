@@ -159,10 +159,10 @@ describe('jq', () => {
     })
 
     it('test throw on error', () => {
-        expect(() => { jq.exec({}, 'foo', {throwOnError: true}) }).toThrow("jq: compile error: foo/0 is not defined at <top-level>, line 1:");
+        expect(() => { jq.exec({}, 'foo', {throwOnError: true}) }).toThrow(/jq: compile error: foo\/0 is not defined at <top-level>, line 1/);
         expect(() => { jq.exec({}, '1/0', {throwOnError: true}) }).toThrow("number (1) and number (0) cannot be divided because the divisor is zero");
-        expect(() => { jq.exec({}, '{', {throwOnError: true}) }).toThrow("jq: compile error: syntax error, unexpected end of file (Unix shell quoting issues?) at <top-level>, line 1:");
-        expect(() => { jq.exec({}, '{(0):1}', {throwOnError: true}) }).toThrow("jq: compile error: Cannot use number (0) as object key at <top-level>, line 1:");
+        expect(() => { jq.exec({}, '{', {throwOnError: true}) }).toThrow(/jq: compile error: syntax error, unexpected end of file.*at <top-level>, line 1/);
+        expect(() => { jq.exec({}, '{(0):1}', {throwOnError: true}) }).toThrow(/jq: compile error: Cannot use number \(0\) as object key at <top-level>, line 1/);
         // jq version may produce "Possibly unterminated 'if' statement" or "syntax error, unexpected end of file"
         expect(() => { jq.exec({}, 'if true then 1 else 0', {throwOnError: true}) }).toThrow("jq: compile error:");
         expect(() => { jq.exec({}, 'null | map(.+1)', {throwOnError: true}) }).toThrow("jq: error: Cannot iterate over null (null)");

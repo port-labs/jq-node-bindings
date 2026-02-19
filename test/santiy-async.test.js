@@ -159,10 +159,10 @@ describe('jq - async', () => {
     })
 
     it('test throw on error', async () => {
-        await expect(jq.execAsync({}, 'foo', {throwOnError: true})).rejects.toThrow("jq: compile error: foo/0 is not defined at <top-level>, line 1:");
+        await expect(jq.execAsync({}, 'foo', {throwOnError: true})).rejects.toThrow(/jq: compile error: foo\/0 is not defined at <top-level>, line 1/);
         await expect(jq.execAsync({}, '1/0', {throwOnError: true})).rejects.toThrow("number (1) and number (0) cannot be divided because the divisor is zero");
-        await expect(jq.execAsync({}, '{', {throwOnError: true})).rejects.toThrow("jq: compile error: syntax error, unexpected end of file (Unix shell quoting issues?) at <top-level>, line 1:");
-        await expect(jq.execAsync({}, '{(0):1}', {throwOnError: true})).rejects.toThrow("jq: compile error: Cannot use number (0) as object key at <top-level>, line 1:");
+        await expect(jq.execAsync({}, '{', {throwOnError: true})).rejects.toThrow(/jq: compile error: syntax error, unexpected end of file.*at <top-level>, line 1/);
+        await expect(jq.execAsync({}, '{(0):1}', {throwOnError: true})).rejects.toThrow(/jq: compile error: Cannot use number \(0\) as object key at <top-level>, line 1/);
         // jq version may produce different error messages for incomplete syntax
         await expect(jq.execAsync({}, 'if true then 1 else 0', {throwOnError: true})).rejects.toThrow("jq: compile error:");
         await expect(jq.execAsync({}, 'null | map(.+1)', {throwOnError: true})).rejects.toThrow("jq: error: Cannot iterate over null (null)");

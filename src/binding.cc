@@ -212,7 +212,7 @@ napi_value ExecSync(napi_env env, napi_callback_info info) {
 
     // Execute
     jq_start(jq, input, 0);
-    jv result = jq_next(jq, 5);
+    jv result = jq_next(jq);
 
     // Convert result
     std::string error_msg;
