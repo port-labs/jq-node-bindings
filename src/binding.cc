@@ -1,16 +1,51 @@
 /**
- * Thin NAPI wrapper for jq
+ * Thin NAPI wrapper for jq with simple LRU cache
  *
- * This is a minimal binding that exposes jq's C API to Node.js.
- * All threading and caching is handled in the JavaScript layer.
+ * No mutexes needed - Node.js main thread is single-threaded.
  */
 
 #include <node_api.h>
 #include <string>
 #include <cstring>
+#include <unordered_map>
+#include <list>
 
 extern "C" {
     #include "jq.h"
+}
+
+// Simple LRU cache for compiled jq filters (no mutex - single threaded)
+static size_t g_cache_size = 100;
+static std::list<std::string> g_lru_order;
+static std::unordered_map<std::string, std::pair<jq_state*, std::list<std::string>::iterator>> g_cache;
+
+static jq_state* cache_get(const std::string& filter) {
+    auto it = g_cache.find(filter);
+    if (it == g_cache.end()) return nullptr;
+
+    // Move to front (most recently used)
+    g_lru_order.erase(it->second.second);
+    g_lru_order.push_front(filter);
+    it->second.second = g_lru_order.begin();
+
+    return it->second.first;
+}
+
+static void cache_put(const std::string& filter, jq_state* jq) {
+    // Evict if at capacity
+    while (g_cache.size() >= g_cache_size && !g_lru_order.empty()) {
+        const std::string& oldest = g_lru_order.back();
+        auto it = g_cache.find(oldest);
+        if (it != g_cache.end()) {
+            jq_teardown(&it->second.first);
+            g_cache.erase(it);
+        }
+        g_lru_order.pop_back();
+    }
+
+    // Insert new entry
+    g_lru_order.push_front(filter);
+    g_cache[filter] = {jq, g_lru_order.begin()};
 }
 
 // Error callback data structure
@@ -19,13 +54,9 @@ struct ErrorData {
     ErrorData() { buf[0] = '\0'; }
 };
 
-// Error callback for jq compilation errors
-// jq may call this multiple times - once with detailed error, then with summary
-// We keep only the first (most detailed) error message
+// Error callback - keep only first (most detailed) error
 static void error_callback(void* data, jv msg) {
     ErrorData* err = static_cast<ErrorData*>(data);
-
-    // Only capture if buffer is empty (first error)
     if (err->buf[0] != '\0') {
         jv_free(msg);
         return;
@@ -35,25 +66,14 @@ static void error_callback(void* data, jv msg) {
         msg = jv_dump_string(msg, JV_PRINT_INVALID);
     }
     const char* str = jv_string_value(msg);
-    // jq sends "jq: error: ..." for compile errors, we convert to "jq: compile error: ..."
     if (strncmp(str, "jq: error", 9) == 0) {
         snprintf(err->buf, sizeof(err->buf), "jq: compile error%s", str + 9);
     } else {
         snprintf(err->buf, sizeof(err->buf), "%s", str);
     }
-    // Remove trailing newline
     char* nl = strchr(err->buf, '\n');
     if (nl) *nl = '\0';
     jv_free(msg);
-}
-
-// Helper: Check NAPI status and throw if error
-static inline bool check_status(napi_env env, napi_status status, const char* msg) {
-    if (status != napi_ok) {
-        napi_throw_error(env, nullptr, msg);
-        return false;
-    }
-    return true;
 }
 
 // Helper: Get string from NAPI value
@@ -65,7 +85,7 @@ static std::string napi_to_string(napi_env env, napi_value value) {
     return result;
 }
 
-// Convert jv value to NAPI value (recursive)
+// Convert jv to NAPI value (recursive)
 static napi_value jv_to_napi(napi_env env, jv value, std::string& error_out) {
     napi_value result;
     jv_kind kind = jv_get_kind(value);
@@ -115,14 +135,12 @@ static napi_value jv_to_napi(napi_env env, jv value, std::string& error_out) {
             while (jv_object_iter_valid(value, iter)) {
                 jv key = jv_object_iter_key(value, iter);
                 jv val = jv_object_iter_value(value, iter);
-
                 napi_value napi_val = jv_to_napi(env, val, error_out);
                 jv_free(val);
                 if (!error_out.empty()) {
                     jv_free(key);
                     return nullptr;
                 }
-
                 napi_set_named_property(env, result, jv_string_value(key), napi_val);
                 jv_free(key);
                 iter = jv_object_iter_next(value, iter);
@@ -136,9 +154,7 @@ static napi_value jv_to_napi(napi_env env, jv value, std::string& error_out) {
     return result;
 }
 
-// ExecSync: Synchronous jq execution
-// Args: (jsonString, filterString)
-// Returns: { value: result }
+// ExecSync: Synchronous jq execution with caching
 napi_value ExecSync(napi_env env, napi_callback_info info) {
     size_t argc = 2;
     napi_value args[2];
@@ -149,7 +165,6 @@ napi_value ExecSync(napi_env env, napi_callback_info info) {
         return nullptr;
     }
 
-    // Get arguments
     std::string json = napi_to_string(env, args[0]);
     std::string filter = napi_to_string(env, args[1]);
 
@@ -162,48 +177,54 @@ napi_value ExecSync(napi_env env, napi_callback_info info) {
         return nullptr;
     }
 
-    // Initialize jq
-    ErrorData err;
-    jq_state* jq = jq_init();
-    if (!jq) {
-        napi_throw_error(env, nullptr, "Failed to initialize jq");
-        return nullptr;
-    }
-    jq_set_error_cb(jq, error_callback, &err);
+    // Try to get from cache
+    jq_state* jq = cache_get(filter);
+    bool from_cache = (jq != nullptr);
 
-    // Compile filter
-    if (!jq_compile(jq, filter.c_str())) {
-        std::string msg = err.buf[0] ? err.buf : "jq: compile error";
-        jq_teardown(&jq);
-        napi_throw_error(env, nullptr, msg.c_str());
-        return nullptr;
+    if (!jq) {
+        // Compile new filter
+        ErrorData err;
+        jq = jq_init();
+        if (!jq) {
+            napi_throw_error(env, nullptr, "Failed to initialize jq");
+            return nullptr;
+        }
+        jq_set_error_cb(jq, error_callback, &err);
+
+        if (!jq_compile(jq, filter.c_str())) {
+            std::string msg = err.buf[0] ? err.buf : "jq: compile error";
+            jq_teardown(&jq);
+            napi_throw_error(env, nullptr, msg.c_str());
+            return nullptr;
+        }
+
+        // Add to cache
+        cache_put(filter, jq);
     }
 
     // Parse input JSON
     jv input = jv_parse(json.c_str());
     if (!jv_is_valid(input)) {
         jv_free(input);
-        jq_teardown(&jq);
         napi_throw_error(env, nullptr, "Invalid JSON input");
         return nullptr;
     }
 
-    // Execute filter (5 second timeout)
+    // Execute
     jq_start(jq, input, 0);
     jv result = jq_next(jq, 5);
 
-    // Convert result to NAPI
+    // Convert result
     std::string error_msg;
     napi_value napi_result = jv_to_napi(env, result, error_msg);
     jv_free(result);
-    jq_teardown(&jq);
 
     if (!error_msg.empty()) {
         napi_throw_error(env, nullptr, error_msg.c_str());
         return nullptr;
     }
 
-    // Wrap in { value: ... } for backwards compatibility
+    // Wrap in { value: ... }
     napi_value ret;
     napi_create_object(env, &ret);
     napi_set_named_property(env, ret, "value", napi_result);
@@ -211,11 +232,21 @@ napi_value ExecSync(napi_env env, napi_callback_info info) {
     return ret;
 }
 
-// SetCacheSize: No-op for backwards compatibility
-// The JavaScript layer handles caching now
+// SetCacheSize: Configure cache size
 napi_value SetCacheSize(napi_env env, napi_callback_info info) {
+    size_t argc = 1;
+    napi_value args[1];
+    napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
+
+    if (argc >= 1) {
+        int64_t size;
+        if (napi_get_value_int64(env, args[0], &size) == napi_ok && size > 0) {
+            g_cache_size = static_cast<size_t>(size);
+        }
+    }
+
     napi_value result;
-    napi_create_int64(env, 0, &result);
+    napi_create_int64(env, g_cache_size, &result);
     return result;
 }
 
