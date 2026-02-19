@@ -4,6 +4,7 @@ declare module '@port-labs/jq-node-bindings' {
   type ExecOptions = {
     enableEnv?: boolean;
     throwOnError?: boolean;
+    timeoutSec?: number;
   };
 
   export class JqExecError extends Error {}

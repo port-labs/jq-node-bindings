@@ -1,7 +1,6 @@
 /**
- * Thin NAPI wrapper for jq with simple LRU cache
- *
- * No mutexes needed - Node.js main thread is single-threaded.
+ * Thin NAPI wrapper for jq with thread-local LRU cache
+ * Each thread gets its own cache to avoid contention and jq_state sharing
  */
 
 #include <node_api.h>
@@ -14,38 +13,57 @@ extern "C" {
     #include "jq.h"
 }
 
-// Simple LRU cache for compiled jq filters (no mutex - single threaded)
-static size_t g_cache_size = 100;
-static std::list<std::string> g_lru_order;
-static std::unordered_map<std::string, std::pair<jq_state*, std::list<std::string>::iterator>> g_cache;
+// Thread-local LRU cache - each thread has its own cache
+struct ThreadLocalCache {
+    size_t cache_size = 100;
+    std::list<std::string> lru_order;
+    std::unordered_map<std::string, std::pair<jq_state*, std::list<std::string>::iterator>> cache;
+
+    ~ThreadLocalCache() {
+        for (auto& entry : cache) {
+            jq_teardown(&entry.second.first);
+        }
+    }
+
+    jq_state* get(const std::string& filter) {
+        auto it = cache.find(filter);
+        if (it == cache.end()) return nullptr;
+
+        // Move to front (most recently used)
+        lru_order.erase(it->second.second);
+        lru_order.push_front(filter);
+        it->second.second = lru_order.begin();
+
+        return it->second.first;
+    }
+
+    void put(const std::string& filter, jq_state* jq) {
+        // Evict if at capacity
+        while (cache.size() >= cache_size && !lru_order.empty()) {
+            const std::string& oldest = lru_order.back();
+            auto it = cache.find(oldest);
+            if (it != cache.end()) {
+                jq_teardown(&it->second.first);
+                cache.erase(it);
+            }
+            lru_order.pop_back();
+        }
+
+        // Insert new entry
+        lru_order.push_front(filter);
+        cache[filter] = {jq, lru_order.begin()};
+    }
+};
+
+static thread_local ThreadLocalCache t_cache;
+static size_t g_cache_size = 100;  // Global default for new threads
 
 static jq_state* cache_get(const std::string& filter) {
-    auto it = g_cache.find(filter);
-    if (it == g_cache.end()) return nullptr;
-
-    // Move to front (most recently used)
-    g_lru_order.erase(it->second.second);
-    g_lru_order.push_front(filter);
-    it->second.second = g_lru_order.begin();
-
-    return it->second.first;
+    return t_cache.get(filter);
 }
 
 static void cache_put(const std::string& filter, jq_state* jq) {
-    // Evict if at capacity
-    while (g_cache.size() >= g_cache_size && !g_lru_order.empty()) {
-        const std::string& oldest = g_lru_order.back();
-        auto it = g_cache.find(oldest);
-        if (it != g_cache.end()) {
-            jq_teardown(&it->second.first);
-            g_cache.erase(it);
-        }
-        g_lru_order.pop_back();
-    }
-
-    // Insert new entry
-    g_lru_order.push_front(filter);
-    g_cache[filter] = {jq, g_lru_order.begin()};
+    t_cache.put(filter, jq);
 }
 
 // Error callback data structure
