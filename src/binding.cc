@@ -268,14 +268,194 @@ napi_value SetCacheSize(napi_env env, napi_callback_info info) {
     return result;
 }
 
+// ============================================================================
+// Async Work Implementation
+// Uses N-API async work to run jq on libuv thread pool
+// ============================================================================
+
+struct AsyncWorkData {
+    // Input
+    std::string json;
+    std::string filter;
+
+    // N-API handles
+    napi_deferred deferred;
+    napi_async_work work;
+    napi_env env;  // Only valid in complete callback
+
+    // Output (set in execute callback)
+    jv result;
+    std::string error_msg;
+    bool success;
+
+    AsyncWorkData() : result(jv_invalid()), success(false) {}
+    ~AsyncWorkData() {
+        if (jv_get_kind(result) != JV_KIND_INVALID || jv_is_valid(result)) {
+            jv_free(result);
+        }
+    }
+};
+
+// Execute callback - runs on libuv worker thread
+// IMPORTANT: napi_env is NOT usable here - no N-API calls allowed
+static void async_execute(napi_env env, void* data) {
+    AsyncWorkData* work_data = static_cast<AsyncWorkData*>(data);
+
+    // Parse input JSON
+    jv input = jv_parse(work_data->json.c_str());
+    if (!jv_is_valid(input)) {
+        jv_free(input);
+        work_data->error_msg = "Invalid JSON input";
+        work_data->success = false;
+        return;
+    }
+
+    // Try to get from thread-local cache
+    jq_state* jq = cache_get(work_data->filter);
+    bool from_cache = (jq != nullptr);
+
+    if (!jq) {
+        // Compile new filter
+        ErrorData err;
+        jq = jq_init();
+        if (!jq) {
+            jv_free(input);
+            work_data->error_msg = "Failed to initialize jq";
+            work_data->success = false;
+            return;
+        }
+        jq_set_error_cb(jq, error_callback, &err);
+
+        if (!jq_compile(jq, work_data->filter.c_str())) {
+            work_data->error_msg = err.buf[0] ? err.buf : "jq: compile error";
+            jq_teardown(&jq);
+            jv_free(input);
+            work_data->success = false;
+            return;
+        }
+
+        // Add to thread-local cache
+        cache_put(work_data->filter, jq);
+    }
+
+    // Execute jq
+    jq_start(jq, input, 0);
+    work_data->result = jq_next(jq);
+    work_data->success = true;
+}
+
+// Complete callback - runs on main thread, napi_env IS valid here
+static void async_complete(napi_env env, napi_status status, void* data) {
+    AsyncWorkData* work_data = static_cast<AsyncWorkData*>(data);
+
+    if (status == napi_cancelled) {
+        // Work was cancelled
+        napi_value error;
+        napi_create_string_utf8(env, "Operation cancelled", NAPI_AUTO_LENGTH, &error);
+        napi_reject_deferred(env, work_data->deferred, error);
+    } else if (!work_data->success) {
+        // Execution failed
+        napi_value error;
+        napi_create_string_utf8(env, work_data->error_msg.c_str(), NAPI_AUTO_LENGTH, &error);
+        napi_reject_deferred(env, work_data->deferred, error);
+    } else {
+        // Convert jv result to napi_value
+        std::string error_msg;
+        napi_value napi_result = jv_to_napi(env, work_data->result, error_msg);
+
+        if (!error_msg.empty()) {
+            napi_value error;
+            napi_create_string_utf8(env, error_msg.c_str(), NAPI_AUTO_LENGTH, &error);
+            napi_reject_deferred(env, work_data->deferred, error);
+        } else {
+            // Wrap in { value: ... } like sync version
+            napi_value ret;
+            napi_create_object(env, &ret);
+            napi_set_named_property(env, ret, "value", napi_result);
+            napi_resolve_deferred(env, work_data->deferred, ret);
+        }
+    }
+
+    // Clean up
+    napi_delete_async_work(env, work_data->work);
+    delete work_data;
+}
+
+// ExecAsync: Asynchronous jq execution using N-API async work
+napi_value ExecAsync(napi_env env, napi_callback_info info) {
+    size_t argc = 2;
+    napi_value args[2];
+    napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
+
+    if (argc < 2) {
+        napi_throw_type_error(env, nullptr, "Expected 2 arguments: json string and filter string");
+        return nullptr;
+    }
+
+    std::string json = napi_to_string(env, args[0]);
+    std::string filter = napi_to_string(env, args[1]);
+
+    if (json.empty()) {
+        napi_throw_error(env, nullptr, "Invalid JSON input");
+        return nullptr;
+    }
+    if (filter.empty()) {
+        napi_throw_error(env, nullptr, "Invalid filter input");
+        return nullptr;
+    }
+
+    // Create async work data
+    AsyncWorkData* work_data = new AsyncWorkData();
+    work_data->json = std::move(json);
+    work_data->filter = std::move(filter);
+    work_data->env = env;
+
+    // Create promise
+    napi_value promise;
+    napi_create_promise(env, &work_data->deferred, &promise);
+
+    // Create async work
+    napi_value resource_name;
+    napi_create_string_utf8(env, "jq_exec_async", NAPI_AUTO_LENGTH, &resource_name);
+
+    napi_status create_status = napi_create_async_work(
+        env,
+        nullptr,  // async_resource
+        resource_name,
+        async_execute,
+        async_complete,
+        work_data,
+        &work_data->work
+    );
+
+    if (create_status != napi_ok) {
+        delete work_data;
+        napi_throw_error(env, nullptr, "Failed to create async work");
+        return nullptr;
+    }
+
+    // Queue the work
+    napi_status queue_status = napi_queue_async_work(env, work_data->work);
+    if (queue_status != napi_ok) {
+        napi_delete_async_work(env, work_data->work);
+        delete work_data;
+        napi_throw_error(env, nullptr, "Failed to queue async work");
+        return nullptr;
+    }
+
+    return promise;
+}
+
 // Module initialization
 napi_value Init(napi_env env, napi_value exports) {
-    napi_value exec_sync_fn, set_cache_size_fn;
+    napi_value exec_sync_fn, exec_async_fn, set_cache_size_fn;
 
     napi_create_function(env, "execSync", NAPI_AUTO_LENGTH, ExecSync, nullptr, &exec_sync_fn);
+    napi_create_function(env, "execAsync", NAPI_AUTO_LENGTH, ExecAsync, nullptr, &exec_async_fn);
     napi_create_function(env, "setCacheSize", NAPI_AUTO_LENGTH, SetCacheSize, nullptr, &set_cache_size_fn);
 
     napi_set_named_property(env, exports, "execSync", exec_sync_fn);
+    napi_set_named_property(env, exports, "execAsync", exec_async_fn);
     napi_set_named_property(env, exports, "setCacheSize", set_cache_size_fn);
 
     return exports;
