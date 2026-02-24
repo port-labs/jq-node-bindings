@@ -281,7 +281,6 @@ struct AsyncWorkData {
     // N-API handles
     napi_deferred deferred;
     napi_async_work work;
-    napi_env env;  // Only valid in complete callback
 
     // Output (set in execute callback)
     jv result;
@@ -289,11 +288,7 @@ struct AsyncWorkData {
     bool success;
 
     AsyncWorkData() : result(jv_invalid()), success(false) {}
-    ~AsyncWorkData() {
-        if (jv_get_kind(result) != JV_KIND_INVALID || jv_is_valid(result)) {
-            jv_free(result);
-        }
-    }
+    ~AsyncWorkData() { jv_free(result); }
 };
 
 // Execute callback - runs on libuv worker thread
@@ -344,29 +339,29 @@ static void async_execute(napi_env env, void* data) {
     work_data->success = true;
 }
 
+// Helper: Create and reject with proper Error object
+static void reject_with_error(napi_env env, napi_deferred deferred, const char* msg) {
+    napi_value error_msg, error;
+    napi_create_string_utf8(env, msg, NAPI_AUTO_LENGTH, &error_msg);
+    napi_create_error(env, nullptr, error_msg, &error);
+    napi_reject_deferred(env, deferred, error);
+}
+
 // Complete callback - runs on main thread, napi_env IS valid here
 static void async_complete(napi_env env, napi_status status, void* data) {
     AsyncWorkData* work_data = static_cast<AsyncWorkData*>(data);
 
     if (status == napi_cancelled) {
-        // Work was cancelled
-        napi_value error;
-        napi_create_string_utf8(env, "Operation cancelled", NAPI_AUTO_LENGTH, &error);
-        napi_reject_deferred(env, work_data->deferred, error);
+        reject_with_error(env, work_data->deferred, "Operation cancelled");
     } else if (!work_data->success) {
-        // Execution failed
-        napi_value error;
-        napi_create_string_utf8(env, work_data->error_msg.c_str(), NAPI_AUTO_LENGTH, &error);
-        napi_reject_deferred(env, work_data->deferred, error);
+        reject_with_error(env, work_data->deferred, work_data->error_msg.c_str());
     } else {
         // Convert jv result to napi_value
         std::string error_msg;
         napi_value napi_result = jv_to_napi(env, work_data->result, error_msg);
 
         if (!error_msg.empty()) {
-            napi_value error;
-            napi_create_string_utf8(env, error_msg.c_str(), NAPI_AUTO_LENGTH, &error);
-            napi_reject_deferred(env, work_data->deferred, error);
+            reject_with_error(env, work_data->deferred, error_msg.c_str());
         } else {
             // Wrap in { value: ... } like sync version
             napi_value ret;
@@ -408,7 +403,6 @@ napi_value ExecAsync(napi_env env, napi_callback_info info) {
     AsyncWorkData* work_data = new AsyncWorkData();
     work_data->json = std::move(json);
     work_data->filter = std::move(filter);
-    work_data->env = env;
 
     // Create promise
     napi_value promise;

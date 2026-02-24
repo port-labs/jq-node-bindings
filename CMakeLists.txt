@@ -10,7 +10,15 @@ if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release)
 endif()
 
+# Aggressive optimizations
+# -fno-plt: avoid PLT indirection for faster calls
+# -fno-semantic-interposition: better inlining (GCC only)
 set(COMMON_OPT_FLAGS "-O3 -DNDEBUG -funroll-loops -ftree-vectorize -fomit-frame-pointer")
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    set(COMMON_OPT_FLAGS "${COMMON_OPT_FLAGS} -fno-plt -fno-semantic-interposition")
+elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    set(COMMON_OPT_FLAGS "${COMMON_OPT_FLAGS} -fno-plt")
+endif()
 
 # Platform-specific optimizations
 if(CMAKE_SYSTEM_PROCESSOR MATCHES "arm64|aarch64")
@@ -103,8 +111,9 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     ${JQ_INSTALL_DIR}/lib/libonig.a
 )
 
-# Strip debug symbols in release for smaller binary
-if(CMAKE_BUILD_TYPE STREQUAL "Release")
+# Strip debug symbols in release for smaller binary (disable with -DSTRIP_SYMBOLS=OFF)
+option(STRIP_SYMBOLS "Strip debug symbols in release build" ON)
+if(CMAKE_BUILD_TYPE STREQUAL "Release" AND STRIP_SYMBOLS)
     if(APPLE)
         add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
             COMMAND strip -x $<TARGET_FILE:${PROJECT_NAME}>
