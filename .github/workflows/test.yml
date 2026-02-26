@@ -19,23 +19,24 @@ jobs:
             os: macos-14
     runs-on: ${{ matrix.os }}
     steps:
-      - name: Install node-gyp deps
+      - name: Install build dependencies
         run: |
           if [ "${{ matrix.os }}" == "ubuntu-22.04" ]; then
-            sudo apt-get install -y autoconf make libtool automake 
+            sudo apt-get update
+            sudo apt-get install -y cmake ninja-build autoconf make libtool automake
           else
-            brew install autoconf automake libtool
+            brew install cmake ninja autoconf automake libtool
           fi
-          python --version
-          python -m pip install packaging setuptools
 
       - uses: actions/checkout@v3
         with:
           submodules: recursive
-      - name: Use Node.js ${{ matrix.node-version }}
+
+      - name: Use Node.js ${{ matrix.node }}
         uses: actions/setup-node@v3
         with:
-          node-version: ${{ matrix.node-version }}
+          node-version: ${{ matrix.node }}
+
       - run: npm ci
-      - run: npm run build --if-present
+      - run: npm run build
       - run: npm test

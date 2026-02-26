@@ -1,17 +1,37 @@
 declare module '@port-labs/jq-node-bindings' {
-  type ExecOptions = { enableEnv?: boolean, throwOnError?: boolean };
-  type ExecAsyncOptions = { enableEnv?: boolean, throwOnError?: boolean, timeoutSec?: number };
+  type JqResult = object | Array<any> | string | number | boolean | null;
 
-  export class JqExecError extends Error {
-  }
+  type ExecOptions = {
+    enableEnv?: boolean;
+    throwOnError?: boolean;
+    timeoutSec?: number;
+  };
 
-  export class JqExecCompileError extends Error {
-  }
+  export class JqExecError extends Error {}
+  export class JqExecCompileError extends JqExecError {}
 
-  export function exec(json: object, input: string, options?: ExecOptions): object | Array<any> | string | number | boolean | null;
-  export function execAsync(json: object, input: string, options?: ExecAsyncOptions): Promise<object | Array<any> | string | number | boolean | null>;
-  export function setCacheSize(cacheSize: number): void;
-  export function renderRecursively(json: object, input: object | Array<any> | string | number | boolean | null, execOptions?: ExecOptions): object | Array<any> | string | number | boolean | null;
-  export function renderRecursivelyAsync(json: object, input: object | Array<any> | string | number | boolean | null, execOptions?: ExecAsyncOptions): Promise<object | Array<any> | string | number | boolean | null>;
+  /**
+   * Execute a jq filter synchronously
+   */
+  export function exec(json: object, filter: string, options?: ExecOptions): JqResult;
 
+  /**
+   * Execute a jq filter asynchronously
+   */
+  export function execAsync(json: object, filter: string, options?: ExecOptions): Promise<JqResult>;
+
+  /**
+   * No-op for backwards compatibility (caching removed in v2)
+   */
+  export function setCacheSize(cacheSize: number): number;
+
+  /**
+   * Render a template with jq expressions ({{...}}) synchronously
+   */
+  export function renderRecursively(json: object, template: JqResult, execOptions?: ExecOptions): JqResult;
+
+  /**
+   * Render a template with jq expressions ({{...}}) asynchronously
+   */
+  export function renderRecursivelyAsync(json: object, template: JqResult, execOptions?: ExecOptions): Promise<JqResult>;
 }
