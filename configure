@@ -17,11 +17,12 @@ CPPFLAGS=-D_REENTRANT ./configure CFLAGS=-fPIC \
             --prefix="${scriptdir}/build/deps" $*
 make -j8
 
-cp modules/oniguruma/src/.libs/libonig.a ${scriptdir}/build/deps/libonig.a
-cp modules/oniguruma/src/.libs/libonig.la ${scriptdir}/build/deps/libonig.la
-cp modules/oniguruma/src/.libs/libonig.lai ${scriptdir}/build/deps/libonig.lai
-cp modules/oniguruma/src/.libs/libonig.5.dylib ${scriptdir}/build/deps/libonig.5.dylib
-cp modules/oniguruma/src/.libs/libonig.dylib ${scriptdir}/build/deps/libonig.dylib
+cp vendor/oniguruma/src/.libs/libonig.a ${scriptdir}/build/deps/libonig.a
+cp vendor/oniguruma/src/.libs/libonig.la ${scriptdir}/build/deps/libonig.la
+cp vendor/oniguruma/src/.libs/libonig.lai ${scriptdir}/build/deps/libonig.lai
+# Copy platform-specific shared libraries
+cp vendor/oniguruma/src/.libs/libonig*.dylib ${scriptdir}/build/deps/ 2>/dev/null || true
+cp vendor/oniguruma/src/.libs/libonig*.so* ${scriptdir}/build/deps/ 2>/dev/null || true
 
 make install-libLTLIBRARIES install-includeHEADERS
 
