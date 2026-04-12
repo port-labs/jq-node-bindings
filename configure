@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Fail fast on any error so a broken build doesn't silently continue.
 set -e
 
 # autoconf, make, libtool, automake
@@ -10,8 +11,16 @@ echo "building jq"
 echo $scriptdir
 
 autoreconf -fi
+# || true: make distclean fails on a fresh clone with no Makefile; that's fine.
 make distclean || true
-CFLAGS="-fPIC -std=gnu11"
+
+# gnu17: pin to C17 + GNU extensions to avoid C23's stricter function pointer
+# type checking, which breaks jq's builtin.c (see jqlang/jq#3206).
+CFLAGS="-fPIC -std=gnu17"
+
+# -Wno-error=incompatible-function-pointer-types is Clang-specific; GCC uses a
+# different warning name, so applying it unconditionally would cause an
+# "unrecognized warning" error on GCC builds.
 cc_version="$(${CC:-cc} --version 2>/dev/null || true)"
 case "$cc_version" in
   *clang*|*Clang*)
@@ -31,6 +40,9 @@ cp modules/oniguruma/src/.libs/libonig.la ${scriptdir}/build/deps/libonig.la
 cp modules/oniguruma/src/.libs/libonig.lai ${scriptdir}/build/deps/libonig.lai
 
 # Copy shared Oniguruma artifacts for the current platform if present.
+# - macOS: .dylib (e.g. libonig.5.dylib) — glob handles version bumps without hardcoding.
+# - Linux: .so* (e.g. libonig.so.5, libonig.so.5.4.0) — Linux uses suffix versioning.
+# The -f guard prevents cp from failing (and aborting via set -e) when a glob finds nothing.
 for lib in modules/oniguruma/src/.libs/libonig*.dylib modules/oniguruma/src/.libs/libonig.so*; do
   if [ -f "$lib" ]; then
     cp "$lib" "${scriptdir}/build/deps/"
