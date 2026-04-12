@@ -17,7 +17,7 @@ jobs:
       NPM_REGISTRY_URL: https://registry.npmjs.org
     steps:
       - name: Install node-gyp deps
-        run: sudo apt-get install -y autoconf make libtool automake
+        run: sudo apt-get install -y autoconf make libtool automake build-essential
       - uses: actions/checkout@v4
         with:
           submodules: recursive

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+set -e
 
 # autoconf, make, libtool, automake
 scriptdir=$(cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd)
@@ -9,7 +10,7 @@ echo "building jq"
 echo $scriptdir
 
 autoreconf -fi
-make distclean
+make distclean || true
 CPPFLAGS=-D_REENTRANT ./configure CFLAGS="-fPIC -std=gnu11 -Wno-error=incompatible-function-pointer-types" \
             --disable-maintainer-mode \
             --with-oniguruma=builtin \
