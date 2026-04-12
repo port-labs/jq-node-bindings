@@ -12,6 +12,7 @@ jobs:
   publish-npm:
     runs-on: ubuntu-latest
     env:
+      GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
       NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
     steps:
       - name: Install node-gyp deps
