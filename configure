@@ -11,7 +11,15 @@ echo $scriptdir
 
 autoreconf -fi
 make distclean || true
-CPPFLAGS=-D_REENTRANT ./configure CFLAGS="-fPIC -std=gnu11 -Wno-error=incompatible-function-pointer-types" \
+CFLAGS="-fPIC -std=gnu11"
+cc_version="$(${CC:-cc} --version 2>/dev/null || true)"
+case "$cc_version" in
+  *clang*|*Clang*)
+    CFLAGS="${CFLAGS} -Wno-error=incompatible-function-pointer-types"
+    ;;
+esac
+
+CPPFLAGS=-D_REENTRANT ./configure CFLAGS="${CFLAGS}" \
             --disable-maintainer-mode \
             --with-oniguruma=builtin \
             --libdir="${scriptdir}/build/deps" \
