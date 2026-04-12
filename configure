@@ -10,7 +10,7 @@ echo $scriptdir
 
 autoreconf -fi
 make distclean
-CPPFLAGS=-D_REENTRANT ./configure CFLAGS=-fPIC \
+CPPFLAGS=-D_REENTRANT ./configure CFLAGS="-fPIC -std=gnu11 -Wno-error=incompatible-function-pointer-types" \
             --disable-maintainer-mode \
             --with-oniguruma=builtin \
             --libdir="${scriptdir}/build/deps" \
