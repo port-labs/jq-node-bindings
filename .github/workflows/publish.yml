@@ -8,22 +8,20 @@ permissions:
   id-token: write
   contents: read
 
+env:
+  NPM_REGISTRY_URL: https://registry.npmjs.org
 jobs:
   publish-npm:
     runs-on: ubuntu-latest
-    env:
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      NPM_REGISTRY_URL: https://registry.npmjs.org
     steps:
       - name: Install node-gyp deps
-        run: sudo apt-get install -y autoconf make libtool automake
-      - uses: actions/checkout@v4
+        run: sudo apt-get install -y autoconf make libtool automake build-essential
+      - uses: actions/checkout@v6
         with:
           submodules: recursive
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
-          node-version: 22
-          cache: "npm"
+          node-version: 24
           registry-url: ${{ env.NPM_REGISTRY_URL }}
       - run: npm ci
       - run: npm publish --provenance --tag=next --access public
