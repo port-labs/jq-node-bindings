@@ -23,7 +23,6 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: 22
-          cache: "npm"
           registry-url: ${{ env.NPM_REGISTRY_URL }}
       - run: npm ci
       - run: npm publish --provenance --tag=next --access public
