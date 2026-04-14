@@ -13,7 +13,6 @@ jobs:
     runs-on: ubuntu-latest
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      NPM_REGISTRY_URL: https://registry.npmjs.org
     steps:
       - name: Install node-gyp deps
         run: sudo apt-get install -y autoconf make libtool automake build-essential
@@ -23,7 +22,6 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: 22
-          registry-url: ${{ env.NPM_REGISTRY_URL }}
       - run: npm ci
       - run: npm publish --provenance --tag=next --access public
         if: ${{ github.event.release.prerelease }}
