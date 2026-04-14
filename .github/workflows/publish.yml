@@ -21,7 +21,7 @@ jobs:
           submodules: recursive
       - uses: actions/setup-node@1d0ff469b7ec7b3cb9d8673fde0c81c44821de2a
         with:
-          node-version: 22.x
+          node-version: 24
           registry-url: ${{ env.NPM_REGISTRY_URL }}
       - name: Upgrade npm for OIDC support
         run: npm install -g npm@latest
