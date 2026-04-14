@@ -21,16 +21,17 @@ jobs:
           submodules: recursive
       - uses: actions/setup-node@v6
         with:
-          node-version: 22
+          node-version: 22.x
           registry-url: ${{ env.NPM_REGISTRY_URL }}
       - name: Upgrade npm for OIDC support
-        run: corepack enable && corepack prepare npm@latest --activate
+        run: |
+          corepack prepare npm@latest --activate
+          corepack enable
+          npm --version
       - run: npm ci
+      - name: Configure npm for OIDC
+        run: echo "registry=https://registry.npmjs.org/" > "$NPM_CONFIG_USERCONFIG"
       - run: npm publish --provenance --tag=next --access public
-        env:
-          NODE_AUTH_TOKEN: ""
         if: ${{ github.event.release.prerelease }}
       - run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ""
         if: ${{ !github.event.release.prerelease }}
