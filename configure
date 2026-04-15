@@ -29,28 +29,21 @@ case "$cc_version" in
 esac
 
 CPPFLAGS=-D_REENTRANT ./configure CFLAGS="${CFLAGS}" \
-            LDFLAGS="-Wl,-rpath,\$ORIGIN" \
             --disable-maintainer-mode \
             --with-oniguruma=builtin \
+            --enable-static \
             --libdir="${scriptdir}/build/deps" \
             --prefix="${scriptdir}/build/deps" $*
 make -j8
 
+mkdir -p "${scriptdir}/build/deps"
+
+cp .libs/libjq.a ${scriptdir}/build/deps/libjq.a
 cp modules/oniguruma/src/.libs/libonig.a ${scriptdir}/build/deps/libonig.a
 cp modules/oniguruma/src/.libs/libonig.la ${scriptdir}/build/deps/libonig.la
 cp modules/oniguruma/src/.libs/libonig.lai ${scriptdir}/build/deps/libonig.lai
-
-# Copy shared Oniguruma artifacts for the current platform if present.
-# - macOS: .dylib (e.g. libonig.5.dylib) — glob handles version bumps without hardcoding.
-# - Linux: .so* (e.g. libonig.so.5, libonig.so.5.4.0) — Linux uses suffix versioning.
-# The -f guard prevents cp from failing (and aborting via set -e) when a glob finds nothing.
-for lib in modules/oniguruma/src/.libs/libonig*.dylib modules/oniguruma/src/.libs/libonig.so*; do
-  if [ -f "$lib" ]; then
-    cp "$lib" "${scriptdir}/build/deps/"
-  fi
-done
-
-make install-libLTLIBRARIES install-includeHEADERS
+cp modules/oniguruma/src/.libs/libonig.5.dylib ${scriptdir}/build/deps/libonig.5.dylib
+cp modules/oniguruma/src/.libs/libonig.dylib ${scriptdir}/build/deps/libonig.dylib
 
 echo "finished building jq"
 popd &> /dev/null
