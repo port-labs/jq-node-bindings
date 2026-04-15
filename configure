@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Fail fast on any error so a broken build doesn't silently continue.
+set -e
 
 # autoconf, make, libtool, automake
 scriptdir=$(cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd)
@@ -9,8 +11,24 @@ echo "building jq"
 echo $scriptdir
 
 autoreconf -fi
-make distclean
-CPPFLAGS=-D_REENTRANT ./configure CFLAGS=-fPIC \
+# || true: make distclean fails on a fresh clone with no Makefile; that's fine.
+make distclean || true
+
+# gnu17: pin to C17 + GNU extensions to avoid C23's stricter function pointer
+# type checking, which breaks jq's builtin.c (see jqlang/jq#3206).
+CFLAGS="-fPIC -std=gnu17"
+
+# -Wno-error=incompatible-function-pointer-types is Clang-specific; GCC uses a
+# different warning name, so applying it unconditionally would cause an
+# "unrecognized warning" error on GCC builds.
+cc_version="$(${CC:-cc} --version 2>/dev/null || true)"
+case "$cc_version" in
+  *clang*|*Clang*)
+    CFLAGS="${CFLAGS} -Wno-error=incompatible-function-pointer-types"
+    ;;
+esac
+
+CPPFLAGS=-D_REENTRANT ./configure CFLAGS="${CFLAGS}" \
             --disable-maintainer-mode \
             --with-oniguruma=builtin \
             --libdir="${scriptdir}/build/deps" \
@@ -20,8 +38,16 @@ make -j8
 cp modules/oniguruma/src/.libs/libonig.a ${scriptdir}/build/deps/libonig.a
 cp modules/oniguruma/src/.libs/libonig.la ${scriptdir}/build/deps/libonig.la
 cp modules/oniguruma/src/.libs/libonig.lai ${scriptdir}/build/deps/libonig.lai
-cp modules/oniguruma/src/.libs/libonig.5.dylib ${scriptdir}/build/deps/libonig.5.dylib
-cp modules/oniguruma/src/.libs/libonig.dylib ${scriptdir}/build/deps/libonig.dylib
+
+# Copy shared Oniguruma artifacts for the current platform if present.
+# - macOS: .dylib (e.g. libonig.5.dylib) — glob handles version bumps without hardcoding.
+# - Linux: .so* (e.g. libonig.so.5, libonig.so.5.4.0) — Linux uses suffix versioning.
+# The -f guard prevents cp from failing (and aborting via set -e) when a glob finds nothing.
+for lib in modules/oniguruma/src/.libs/libonig*.dylib modules/oniguruma/src/.libs/libonig.so*; do
+  if [ -f "$lib" ]; then
+    cp "$lib" "${scriptdir}/build/deps/"
+  fi
+done
 
 make install-libLTLIBRARIES install-includeHEADERS
 
