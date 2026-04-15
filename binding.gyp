@@ -20,8 +20,8 @@
                     "OS=='linux'",
                     {
                         "libraries": [
-                            "-Wl,-rpath='$$ORIGIN/../deps'",
-                            "../build/deps/libjq.so.1"
+                            "../build/deps/libjq.a",
+                            "../build/deps/libonig.a"
                         ],
                         "cflags_cc": [
                             "-std=c++17"
@@ -35,7 +35,8 @@
                     "OS=='mac'",
                     {
                         "libraries": [
-                            "../build/deps/libjq.dylib"
+                            "../build/deps/libjq.a",
+                            "../build/deps/libonig.a"
                         ],
                         "xcode_settings": {
                             "MACOSX_DEPLOYMENT_TARGET": "12.0.1",
@@ -47,8 +48,7 @@
                         ],
                         "include_dirs": [
                             "deps/jq/src"
-                        ],      "cflags": ["-fsanitize=address", "-fno-omit-frame-pointer"],
-      "ldflags": ["-fsanitize=address"],
+                        ]
                     }
                 ],
                 [
