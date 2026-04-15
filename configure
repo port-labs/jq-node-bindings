@@ -29,6 +29,7 @@ case "$cc_version" in
 esac
 
 CPPFLAGS=-D_REENTRANT ./configure CFLAGS="${CFLAGS}" \
+            LDFLAGS="-Wl,-rpath,\$ORIGIN" \
             --disable-maintainer-mode \
             --with-oniguruma=builtin \
             --libdir="${scriptdir}/build/deps" \
