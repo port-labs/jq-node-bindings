@@ -42,8 +42,8 @@ cp .libs/libjq.a ${scriptdir}/build/deps/libjq.a
 cp modules/oniguruma/src/.libs/libonig.a ${scriptdir}/build/deps/libonig.a
 cp modules/oniguruma/src/.libs/libonig.la ${scriptdir}/build/deps/libonig.la
 cp modules/oniguruma/src/.libs/libonig.lai ${scriptdir}/build/deps/libonig.lai
-cp modules/oniguruma/src/.libs/libonig.5.dylib ${scriptdir}/build/deps/libonig.5.dylib
-cp modules/oniguruma/src/.libs/libonig.dylib ${scriptdir}/build/deps/libonig.dylib
+[ -f modules/oniguruma/src/.libs/libonig.5.dylib ] && cp modules/oniguruma/src/.libs/libonig.5.dylib ${scriptdir}/build/deps/libonig.5.dylib || true
+[ -f modules/oniguruma/src/.libs/libonig.dylib ] && cp modules/oniguruma/src/.libs/libonig.dylib ${scriptdir}/build/deps/libonig.dylib || true
 
 echo "finished building jq"
 popd &> /dev/null
