@@ -10,23 +10,9 @@
                     "action": [
                         "node", "../util/configure"
                     ],
-                    "conditions": [
-                        [
-                            'OS=="mac"',
-                            {
-                                'outputs': [
-                                    'deps/libjq/src/libjq.dylib',
-                                    'deps/libjq/src/libjq.1.dylib'
-                                ]
-                            },
-                            {
-                                'outputs': [
-                                    'deps/jq/src/libjq.so',
-                                    'deps/jq/src/libjq.so.1',
-                                    'deps/jq/src/libjq.a'
-                                ],
-                            }
-                        ]
+                    "outputs": [
+                        "build/deps/libjq.a",
+                        "build/deps/libonig.a"
                     ]
                 }
             ],

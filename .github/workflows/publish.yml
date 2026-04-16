@@ -10,6 +10,7 @@ permissions:
 
 env:
   NPM_REGISTRY_URL: https://registry.npmjs.org
+
 jobs:
   publish-npm:
     runs-on: ubuntu-latest
@@ -28,3 +29,4 @@ jobs:
         if: ${{ github.event.release.prerelease }}
       - run: npm publish --provenance --access public
         if: ${{ !github.event.release.prerelease }}
+
