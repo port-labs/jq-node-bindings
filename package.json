@@ -33,7 +33,7 @@
     "jsdoc": "^4.0.3",
     "jshint": "^2.13.6",
     "mocha": "^10.2.0",
-    "node-gyp": "^10.2.0",
+    "node-gyp": "^13.0.1",
     "prettier": "^2.5.1",
     "toolkit-jsdoc": "^1.0.0"
   },
